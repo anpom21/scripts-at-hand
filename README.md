@@ -1,4 +1,4 @@
-# ARIS CLI (aris)
+# ARIS CLI
 
 A lightweight, repo-local CLI that consolidates many production scripts (Python + Bash) behind a single command:
 
@@ -6,7 +6,6 @@ A lightweight, repo-local CLI that consolidates many production scripts (Python 
 - `aris <script_name> [args...]` runs a script
 - `aris search` opens an interactive real-time search UI
 - `aris refresh` updates `config.yaml` and permissions
-- `aris completion bash` prints a bash completion script
 
 ## Repository Layout
 
@@ -26,19 +25,21 @@ A lightweight, repo-local CLI that consolidates many production scripts (Python 
 
 ## Install / Use
 
-### 1) Put `aris` on PATH
-
-Option A: symlink the entrypoint:
+### 1) Clone repository
 
 ```bash
-sudo ln -s /path/to/aris-cli/main.sh /usr/local/bin/aris
-sudo chmod +x /path/to/aris-cli/main.sh
+git clone https://github.com/yourusername/aris-cli.git
+cd aris-cli
 ```
 
-Option B: add an alias:
+
+### 2) Add `aris` as a command
+
+Add an alias to your `~/.bashrc` and source the completion script:
 
 ```bash
 alias aris='/path/to/aris-cli/main.sh'
+source <(aris completion bash)
 ```
 
 ### 2) Add scripts
@@ -48,7 +49,15 @@ Put scripts in `scripts/` (supports `.py` and `.sh`). Nested paths are allowed.
 **Script naming:**
 - Scripts keep their original filenames (e.g., `2_rename_files.py`)
 - Only when name collisions occur will parent directory names be prepended
-- Example: If two scripts named `run.py` exist, they might become `scripts_run.py` and `other_scripts_run.py`
+- Example: If two scripts named `run.py` exist, they might become `helper_scripts_run.py` and `other_scripts_run.py`.
+If the folder structure is:
+```
+scripts/
+├── helper_scripts/
+│   └── run.py
+└── other_scripts/
+    └── run.py
+```
 
 ### 3) Configure external repositories (optional)
 
@@ -74,11 +83,7 @@ On every run, `aris` refreshes and writes the bottom `scripts:` section with:
 
 ### 4) Autocomplete
 
-```bash
-source <(aris completion bash)
-```
-
-Add the above line to `~/.bashrc`. Autocomplete now includes all scripts from both local and configured repositories.
+Autocomplete now includes all scripts from both local and configured repositories.
 
 **Usage examples:**
 - Type `aris sync_an` and press TAB → completes to `aris sync_and_sort_images.sh`

@@ -1,6 +1,6 @@
 
 """
-Image comparison and optional move utility
+Image capture and collection comparison tool Optional move/copy of images.
 
 Features
 --------

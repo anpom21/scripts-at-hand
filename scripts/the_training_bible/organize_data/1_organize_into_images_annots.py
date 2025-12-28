@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""Creates 'images' and 'annots' subdirectories in category folders and moves PNG files into 'images' subfolder."""
 from pathlib import Path
 import shutil
 import sys

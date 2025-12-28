@@ -34,11 +34,24 @@ def list_scripts(root: Path) -> int:
     cfg = load_config(root)
     entries = build_script_index(root, cfg)
 
+    # Color codes
+    GREEN = "\033[0;32m"
+    RED = "\033[0;31m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+
     print("Available scripts:\n")
     for e in entries:
-        src = f"[{e.source}]" if e.source != "local" else ""
-        desc = f" - {e.description}" if e.description else ""
-        print(f"  {e.name} {src}{desc}")
+        # Script name in green
+        name_colored = f"{GREEN}{e.name}{RESET}"
+        
+        # Source in red brackets if not local
+        src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
+        
+        # Description in dim grey
+        desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
+        
+        print(f"  {name_colored}{src_colored}{desc_colored}")
 
     return 0
 
@@ -124,13 +137,12 @@ Execute aris scripts with: aris <script> <args>
 Example:
   aris collection_annots_overview.py <collection_dir>
   aris 2_rename_files.py --help
-  aris segment.py --input images/ --output labels/
+  aris review_annotations.py -d ./my_collection -n collection_review
 
 Options:
+  search              Interactive search for scripts
   --list              List all available scripts
   --refresh           Refresh script index and show changes
-  search              Interactive search for scripts
-  completion bash     Generate bash completion script
   --help, -h          Show this help message"""
 
     ap = argparse.ArgumentParser(

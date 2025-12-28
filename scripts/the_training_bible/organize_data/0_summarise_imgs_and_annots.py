@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Aggregates image/annotation pairing statistics by category name across capture directories with optional CSV output."""
 import argparse
 import csv
 import re

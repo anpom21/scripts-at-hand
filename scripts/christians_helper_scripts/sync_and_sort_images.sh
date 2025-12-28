@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# Syncs images from GCS by date range, builds inference records, and sorts them into category folders.
 # Script to sync and sort images from a machine
 # Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]
 

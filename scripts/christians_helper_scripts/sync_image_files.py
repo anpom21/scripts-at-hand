@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Syncs missing machine images from GCS to local directory by comparing filenames and filtering by date range."""
 import argparse
 import os
 import subprocess

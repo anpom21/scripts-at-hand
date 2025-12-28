@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Renames image and annotation files to standardized format with capture device name and ISO timestamp."""
 import os
 import re
 import argparse

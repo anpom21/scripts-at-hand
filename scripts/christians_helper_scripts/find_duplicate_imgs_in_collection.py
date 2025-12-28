@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""Finds duplicate PNG filenames across all subdirectories and reports conflicts with optional CSV output."""
 """
 Find duplicate PNG filenames under a directory.
 

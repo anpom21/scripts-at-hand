@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Syncs local unit images with Firestore inference records and exports eval data to CSV for ML tracking."""
 import argparse
 import csv
 import os

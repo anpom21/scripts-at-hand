@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Validates folder structure and filename conventions for collection/capture datasets with detailed error reporting."""
 import os
 import re
 import argparse

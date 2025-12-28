@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Appends ground-truth category column to CSV by matching filenames to their folder locations in image directory."""
 """
 Append a ground-truth category ("gt") column to a CSV by looking up
 each file_name in a directory where images are organized in category folders.

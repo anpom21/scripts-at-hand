@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Analyzes image/annotation pairing in collections, identifies missing pairs per category, and generates summary reports."""
 import argparse
 import csv
 import re

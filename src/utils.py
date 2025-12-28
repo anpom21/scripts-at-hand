@@ -188,10 +188,16 @@ def extract_description(path: Path) -> str:
         return ""
 
     if _is_python_script(path):
-        # Attempt docstring parse using a regex on first triple quote block.
-        m = re.search(r"\A\s*(?:#.*\n)*\s*([\"\']{3})(.*?)(\1)", head, re.S)
-        if m:
-            doc = m.group(2).strip().splitlines()
+        # Attempt docstring parse - try single-line first, then multi-line
+        # Single-line: """...""" on one line
+        single_line = re.search(r"\A\s*(?:#.*\n)*\s*([\"\']{3})(.+?)(\1)", head, re.M)
+        if single_line:
+            return single_line.group(2).strip()
+        
+        # Multi-line: """...""" across multiple lines
+        multi_line = re.search(r"\A\s*(?:#.*\n)*\s*([\"\']{3})(.*?)(\1)", head, re.S)
+        if multi_line:
+            doc = multi_line.group(2).strip().splitlines()
             if doc:
                 return doc[0].strip()
 

@@ -24,6 +24,7 @@ if [[ ! -f "$ROOT_DIR/config.yaml" ]]; then
   cat > "$ROOT_DIR/config.yaml" <<'YAML'
 repositories: []
 
+
 scripts: []
 YAML
 fi
@@ -31,8 +32,6 @@ fi
 
 # If no arguments are given run list, refresh, help
 if [[ $# -eq 0 ]]; then
-  "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --list
-  echo
   "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
   echo
   "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" -h

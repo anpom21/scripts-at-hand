@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Moves random paired image/annotation files into a sibling 'val' directory by matching normalized filename keys."""
 """
 Split a subset of paired (image, annot) files from a dataset into a sibling 'val' directory.
 

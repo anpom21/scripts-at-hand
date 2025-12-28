@@ -1,3 +1,4 @@
+"""Compares images between two collection directories by filename and reports which images in B are missing from A."""
 """
 Check if each image in Collection B exists in Collection A (original).
 Optionally write a summary file containing the *B-side paths* of images
