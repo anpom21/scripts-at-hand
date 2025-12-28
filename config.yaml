@@ -1,0 +1,52 @@
+repositories:
+- name: Annotation
+  path: /home/simon/Annotation
+  python3: /home/simon/Annotation/.venv/bin/python3
+  scripts:
+  - segment.py
+- name: Synthetics
+  path: /home/simon/Documents/Synthetics
+  python3: /home/simon/Documents/Synthetics/.venv/bin/python3
+  scripts:
+  - run.sh
+  - synth/synthesize.py
+  - synthesize.py
+scripts:
+- name: christians_helper_scripts_build_inference_records.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_check_and_move_images.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_collection_annots_overview.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_compare_images_between_two_dirs.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_find_duplicate_imgs_in_collection.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_fix_category_annotations.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_move_n_random_images_to_val.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_summarise_imgs_and_annots.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_sync_and_sort_images.sh
+  python3: NAN
+- name: christians_helper_scripts_sync_image_files.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: christians_helper_scripts_update_bulk_download.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: run.sh
+  python3: NAN
+- name: segment.py
+  python3: /home/simon/Annotation/.venv/bin/python3
+- name: synth_synthesize.py
+  python3: /home/simon/Documents/Synthetics/.venv/bin/python3
+- name: the_training_bible_capture_sorting_duplicates.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: the_training_bible_organize_data_0_summarise_imgs_and_annots.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: the_training_bible_organize_data_1_organize_into_images_annots.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: the_training_bible_organize_data_2_rename_files.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+- name: the_training_bible_organize_data_3_validate_data_structure.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
