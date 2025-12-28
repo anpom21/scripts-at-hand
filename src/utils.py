@@ -38,6 +38,8 @@ class ScriptEntry:
         relpath: Script path relative to its repository root (or scripts/ for local).
         abspath: Absolute filesystem path to script.
         description: Best-effort extracted description.
+        execution_path: Directory to execute the script from.
+        hash_id: SHA256 hash of script content for collision detection.
     """
 
     name: str
@@ -46,6 +48,8 @@ class ScriptEntry:
     relpath: str
     abspath: str
     description: str = ""
+    execution_path: str = ""
+    hash_id: str = ""
 
 
 # ----------------------------- YAML CONFIG ---------------------------------
@@ -221,17 +225,68 @@ def extract_description(path: Path) -> str:
 def normalize_script_name(relpath: str) -> str:
     """Normalize a relative path into a CLI-friendly script name.
 
+    Now preserves original filename unless there's a collision.
     Examples:
-        synth/synthesize.py -> synth_synthesize.py
+        organize_data/2_rename_files.py -> 2_rename_files.py (if no collision)
+        synth/synthesize.py -> synthesize.py (if no collision)
 
     Args:
         relpath: Script relative path.
 
     Returns:
-        Normalized name.
+        Base filename (or full normalized path if needed for collision resolution).
     """
 
-    return relpath.replace(os.sep, "_")
+    # Return just the filename (basename)
+    return Path(relpath).name
+
+
+def resolve_name_collisions(entries: List[Tuple[str, Path, str, str, str, str]]) -> List[Tuple[str, Path, str, str, str, str]]:
+    """Resolve naming collisions by progressively adding parent directory names.
+
+    Args:
+        entries: List of tuples (proposed_name, path, python3, source, relpath, description)
+
+    Returns:
+        List of tuples with resolved unique names.
+    """
+
+    from collections import defaultdict
+
+    # Track which names have collisions
+    name_counts: Dict[str, List[int]] = defaultdict(list)
+    for idx, (name, _, _, _, _, _) in enumerate(entries):
+        name_counts[name].append(idx)
+
+    result = list(entries)
+
+    # For each collision, add parent directories until unique
+    for name, indices in name_counts.items():
+        if len(indices) <= 1:
+            continue
+
+        # We have a collision, need to resolve
+        for idx in indices:
+            _, path, python3, source, relpath, description = result[idx]
+            parts = Path(relpath).parts
+
+            # Try adding parent directories progressively
+            unique_name = name
+            for depth in range(1, len(parts)):
+                # Build name from last 'depth+1' parts
+                unique_name = "_".join(parts[-(depth + 1):])
+                # Check if this resolves the collision
+                is_unique = True
+                for check_idx, (check_name, _, _, _, _, _) in enumerate(result):
+                    if check_idx != idx and check_name == unique_name:
+                        is_unique = False
+                        break
+                if is_unique:
+                    break
+
+            result[idx] = (unique_name, path, python3, source, relpath, description)
+
+    return result
 
 
 def list_local_scripts(root: Path) -> List[Path]:
@@ -309,6 +364,23 @@ def set_executable(path: Path) -> None:
         pass
 
 
+def compute_script_hash(path: Path) -> str:
+    """Compute SHA256 hash of script content.
+
+    Args:
+        path: Script file path.
+
+    Returns:
+        Hex digest of file content hash.
+    """
+
+    try:
+        with path.open("rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        return ""
+
+
 # ----------------------------- INDEX BUILD ---------------------------------
 
 def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
@@ -322,7 +394,8 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
         List of ScriptEntry.
     """
 
-    entries: List[ScriptEntry] = []
+    # Collect all scripts first with proposed names
+    proposed_entries = []
 
     # 1) Local scripts
     default_py = _default_system_python3()
@@ -330,49 +403,93 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
         rel = str(p.relative_to(root / SCRIPTS_DIRNAME))
         name = normalize_script_name(rel)
         python3 = default_py if _is_python_script(p) else "NAN"
-        entries.append(
-            ScriptEntry(
-                name=name,
-                python3=python3,
-                source="local",
-                relpath=str(Path(SCRIPTS_DIRNAME) / rel),
-                abspath=str(p),
-                description=extract_description(p),
-            )
-        )
+        exec_path = str(p.parent)
+        proposed_entries.append((name, p, python3, "local", rel, extract_description(p), exec_path))
 
     # 2) Repository scripts
     for repo in cfg.get("repositories", []) or []:
         rname = repo.get("name", "repo")
         rpath = Path(repo.get("path", ""))
         rpy = repo.get("python3", default_py)
+        rexec = repo.get("execution_path", str(rpath))
         rscripts = repo.get("scripts", []) or []
         for p in list_repo_scripts(rpath, rscripts):
             rel = str(p.relative_to(rpath))
             name = normalize_script_name(rel)
             python3 = rpy if _is_python_script(p) else "NAN"
-            entries.append(
-                ScriptEntry(
-                    name=name,
-                    python3=python3,
-                    source=rname,
-                    relpath=rel,
-                    abspath=str(p),
-                    description=extract_description(p),
-                )
+            # execution_path can be overridden per-repository
+            exec_path = rexec
+            proposed_entries.append((name, p, python3, rname, rel, extract_description(p), exec_path))
+
+    # Resolve name collisions
+    resolved = []
+    for name, p, python3, source, rel, desc, exec_path in proposed_entries:
+        resolved.append((name, p, python3, source, rel, desc, exec_path))
+
+    # Group by name to detect collisions
+    from collections import defaultdict
+    name_groups: Dict[str, List[int]] = defaultdict(list)
+    for idx, (name, _, _, _, _, _, _) in enumerate(resolved):
+        name_groups[name].append(idx)
+
+    # Resolve collisions
+    for name, indices in name_groups.items():
+        if len(indices) > 1:
+            # Collision detected - need to make names unique
+            for idx in indices:
+                _, p, python3, source, relpath, desc, exec_path = resolved[idx]
+                parts = Path(relpath).parts
+                unique_name = name
+                
+                # Try adding parent directories until unique
+                for depth in range(1, len(parts)):
+                    candidate = "_".join(parts[-(depth + 1):])
+                    # Check if candidate is unique among all current names
+                    is_unique = True
+                    for check_idx, (check_name, _, _, _, _, _, _) in enumerate(resolved):
+                        if check_idx != idx and check_name == candidate:
+                            is_unique = False
+                            break
+                    if is_unique:
+                        unique_name = candidate
+                        break
+                
+                resolved[idx] = (unique_name, p, python3, source, relpath, desc, exec_path)
+
+    # Build ScriptEntry objects with hash detection
+    entries: List[ScriptEntry] = []
+    hash_map: Dict[str, ScriptEntry] = {}
+    
+    for name, p, python3, source, relpath, desc, exec_path in resolved:
+        hash_id = compute_script_hash(p)
+        
+        # Check for hash collision (duplicate content)
+        if hash_id and hash_id in hash_map:
+            existing = hash_map[hash_id]
+            print(
+                f"WARNING: Script content collision detected!\n"
+                f"  Script 1: {existing.name} ({existing.source})\n"
+                f"  Script 2: {name} ({source})\n"
+                f"  Both scripts have identical content (hash: {hash_id[:16]}...)\n",
+                file=sys.stderr,
             )
+        
+        entry = ScriptEntry(
+            name=name,
+            python3=python3,
+            source=source,
+            relpath=str(Path(SCRIPTS_DIRNAME) / relpath) if source == "local" else relpath,
+            abspath=str(p),
+            description=desc,
+            execution_path=exec_path,
+            hash_id=hash_id,
+        )
+        entries.append(entry)
+        
+        if hash_id:
+            hash_map[hash_id] = entry
 
-    # De-duplicate by name (local wins)
-    dedup: Dict[str, ScriptEntry] = {}
-    for e in entries:
-        if e.name not in dedup:
-            dedup[e.name] = e
-        else:
-            # prefer local
-            if dedup[e.name].source != "local" and e.source == "local":
-                dedup[e.name] = e
-
-    return sorted(dedup.values(), key=lambda x: x.name.lower())
+    return sorted(entries, key=lambda x: x.name.lower())
 
 
 def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> Dict[str, Any]:
@@ -390,7 +507,12 @@ def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> D
 
     scripts_out = []
     for e in entries:
-        scripts_out.append({"name": e.name, "python3": e.python3})
+        scripts_out.append({
+            "name": e.name,
+            "python3": e.python3,
+            "execution_path": e.execution_path,
+            "hash_id": e.hash_id,
+        })
     cfg["scripts"] = scripts_out
     return cfg
 

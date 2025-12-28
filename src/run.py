@@ -71,8 +71,8 @@ def run_script(root: Path, script_name: str, script_args: list[str]) -> int:
     else:
         cmd = ["bash", path] + script_args
 
-    # Execute in script's directory (so relative paths work)
-    cwd = str(Path(path).parent)
+    # Execute in script's execution_path (or script's directory if not set)
+    cwd = entry.execution_path if entry.execution_path else str(Path(path).parent)
 
     p = subprocess.run(cmd, cwd=cwd)
     return p.returncode

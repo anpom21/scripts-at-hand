@@ -14,6 +14,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from utils import load_config, build_script_index
+
 
 def bash_completion(root: Path) -> str:
     """Generate bash completion script.
@@ -25,12 +27,17 @@ def bash_completion(root: Path) -> str:
         Bash completion script as string.
     """
 
+    # Load all scripts from the index
+    cfg = load_config(root)
+    entries = build_script_index(root, cfg)
+    script_names = " ".join(e.name for e in entries)
+
     return f"""# Bash completion for aris
 # Usage:
 #   source <(aris completion bash)
 
 _aris_complete() {{
-  local cur prev
+  local cur prev words
   COMPREPLY=()
   cur="${{COMP_WORDS[COMP_CWORD]}}"
   prev="${{COMP_WORDS[COMP_CWORD-1]}}"
@@ -39,15 +46,18 @@ _aris_complete() {{
   local subcmds="search refresh completion help"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-    # list scripts + subcommands
-    local scripts
-    scripts=$(python3 \"{root}/src/run.py\" --root \"{root}\" --list | awk '{{print $1}}' | tr '\n' ' ')
-    COMPREPLY=( $(compgen -W "$subcmds $scripts" -- "$cur") )
+    # First argument: complete subcommands and script names
+    local all_options="$subcmds {script_names}"
+    COMPREPLY=( $(compgen -W "$all_options" -- "$cur") )
+    return 0
+  else
+    # For script arguments, use default file/directory completion
+    COMPREPLY=( $(compgen -f -- "$cur") )
     return 0
   fi
 }}
 
-complete -F _aris_complete aris
+complete -o filenames -F _aris_complete aris
 """
 
 
