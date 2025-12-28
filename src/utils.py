@@ -489,6 +489,18 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
         if hash_id:
             hash_map[hash_id] = entry
 
+    # Apply overrides from cfg["scripts"] section
+    cfg_scripts = {s["name"]: s for s in cfg.get("scripts", []) or []}
+    for entry in entries:
+        if entry.name in cfg_scripts:
+            override = cfg_scripts[entry.name]
+            # Apply execution_path override if present
+            if "execution_path" in override and override["execution_path"]:
+                entry.execution_path = override["execution_path"]
+            # Apply python3 override if present
+            if "python3" in override and override["python3"]:
+                entry.python3 = override["python3"]
+
     return sorted(entries, key=lambda x: x.name.lower())
 
 

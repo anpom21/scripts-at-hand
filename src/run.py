@@ -65,11 +65,40 @@ def run_script(root: Path, script_name: str, script_args: list[str]) -> int:
         return 2
 
     path = entry.abspath
+    
+    # Convert relative paths in script_args to absolute paths
+    # This preserves paths relative to the user's current directory
+    # before we change to execution_path
+    resolved_args = []
+    for arg in script_args:
+        # Check if arg looks like a path or if it exists as a file/directory
+        # Skip obvious flags/options (start with -)
+        if not arg.startswith('-'):
+            arg_path = Path(arg)
+            # If it's a relative path, convert to absolute
+            if not arg_path.is_absolute():
+                abs_path = Path.cwd() / arg_path
+                # If the path exists from current directory, use absolute path
+                if abs_path.exists():
+                    resolved_args.append(str(abs_path))
+                else:
+                    # Path doesn't exist - could be a path argument that will be created,
+                    # or just a regular string argument. If it looks like a path (has separators
+                    # or starts with ./ or ../), resolve it anyway
+                    if ('/' in arg or '\\' in arg or arg.startswith('./')):
+                        resolved_args.append(str(abs_path.resolve()))
+                    else:
+                        # Keep as-is (probably just a string argument)
+                        resolved_args.append(arg)
+            else:
+                resolved_args.append(arg)
+        else:
+            resolved_args.append(arg)
 
     if path.lower().endswith(".py"):
-        cmd = [entry.python3, path] + script_args
+        cmd = [entry.python3, path] + resolved_args
     else:
-        cmd = ["bash", path] + script_args
+        cmd = ["bash", path] + resolved_args
 
     # Execute in script's execution_path (or script's directory if not set)
     cwd = entry.execution_path if entry.execution_path else str(Path(path).parent)

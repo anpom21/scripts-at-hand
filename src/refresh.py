@@ -46,11 +46,19 @@ def refresh(root: Path, verbose: bool = False) -> int:
     (root / "scripts").mkdir(parents=True, exist_ok=True)
     (root / "logs").mkdir(parents=True, exist_ok=True)
 
-    # Load old config to compare
-    cfg = load_config(root)
-    old_scripts = {s["name"]: s.get("source", "local") for s in cfg.get("scripts", [])}
+    # Save old config for comparison
+    old_config_path = root / "logs" / ".old_config.yaml"
+    config_path = root / "config.yaml"
     
-    # Build new entries
+    # Read old config if it exists
+    old_config_text = ""
+    if old_config_path.exists():
+        old_config_text = old_config_path.read_text()
+    
+    # Load current config
+    cfg = load_config(root)
+    
+    # Build new entries WITH overrides to preserve user edits
     entries = build_script_index(root, cfg)
 
     # Set executable for all shell scripts (local only)
@@ -61,36 +69,77 @@ def refresh(root: Path, verbose: bool = False) -> int:
     # Update config
     cfg = update_scripts_section(cfg, entries)
     save_config(root, cfg)
+    
+    # Save current config as old for next time
+    if config_path.exists():
+        import shutil
+        shutil.copy(config_path, old_config_path)
 
     ensure_logs_structure(root, entries)
     
-    # If verbose, show what changed
+    # If verbose, show what changed in the config
     if verbose:
-        new_scripts = {e.name: e.source for e in entries}
+        new_config_text = config_path.read_text()
         
-        added = {name: src for name, src in new_scripts.items() if name not in old_scripts}
-        removed = {name: src for name, src in old_scripts.items() if name not in new_scripts}
-        
-        if added or removed:
-            # Green color code
-            GREEN = "\033[0;32m"
-            # Non bold greem
-            GREEN_THIN = "\033[0;32m"
-            RED = "\033[0;31m"
-            RESET = "\033[0m"
-            BOLD_GREEN = "\033[1;32m"
+        if old_config_text and old_config_text != new_config_text:
+            # Parse both configs to compare scripts sections
+            import yaml
+            old_data = yaml.safe_load(old_config_text) if old_config_text else {"scripts": []}
+            new_data = yaml.safe_load(new_config_text)
             
-            print(f"\n{BOLD_GREEN}Config has been updated successfully{RESET}", file=sys.stderr)
+            old_scripts = {s["name"]: s for s in old_data.get("scripts", [])}
+            new_scripts = {s["name"]: s for s in new_data.get("scripts", [])}
             
-            for name, src in sorted(added.items()):
-                src_label = f" [{src}]" if src != "local" else ""
-                print(f"{GREEN}+ {name}{src_label}{RESET}", file=sys.stderr)
+            added = {name for name in new_scripts if name not in old_scripts}
+            removed = {name for name in old_scripts if name not in new_scripts}
+            modified = {}
             
-            for name, src in sorted(removed.items()):
-                src_label = f" [{src}]" if src != "local" else ""
-                print(f"{RED}- {name}{src_label}{RESET}", file=sys.stderr)
+            for name in new_scripts:
+                if name in old_scripts:
+                    changes = []
+                    for key in ["python3", "execution_path", "hash_id", "source"]:
+                        old_val = old_scripts[name].get(key, "")
+                        new_val = new_scripts[name].get(key, "")
+                        if old_val != new_val:
+                            changes.append((key, old_val, new_val))
+                    if changes:
+                        modified[name] = changes
             
-            print(file=sys.stderr)
+            if added or removed or modified:
+                # Color codes
+                GREEN = "\033[0;32m"
+                RED = "\033[0;31m"
+                YELLOW = "\033[0;33m"
+                RESET = "\033[0m"
+                BOLD_GREEN = "\033[1;32m"
+                DIM = "\033[2m"
+                
+                print(f"\n{BOLD_GREEN}Config has been updated{RESET}", file=sys.stderr)
+                
+                for name in sorted(added):
+                    src = new_scripts[name].get("source", "local")
+                    src_label = f" [{src}]" if src != "local" else ""
+                    print(f"{GREEN}+ {name}{src_label}{RESET}", file=sys.stderr)
+                
+                for name in sorted(removed):
+                    src = old_scripts[name].get("source", "local")
+                    src_label = f" [{src}]" if src != "local" else ""
+                    print(f"{RED}- {name}{src_label}{RESET}", file=sys.stderr)
+                
+                for name in sorted(modified.keys()):
+                    changes = modified[name]
+                    src = new_scripts[name].get("source", "local")
+                    src_label = f" [{src}]" if src != "local" else ""
+                    print(f"{YELLOW}~ {name}{src_label}{RESET}", file=sys.stderr)
+                    for key, old_val, new_val in changes:
+                        # Truncate long values (like hash_id)
+                        if len(str(old_val)) > 40:
+                            old_val = str(old_val)[:40] + "..."
+                        if len(str(new_val)) > 40:
+                            new_val = str(new_val)[:40] + "..."
+                        print(f"{DIM}    {key}: {old_val} → {new_val}{RESET}", file=sys.stderr)
+                
+                print(file=sys.stderr)
     
     return 0
 
