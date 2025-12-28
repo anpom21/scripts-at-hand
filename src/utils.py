@@ -512,6 +512,7 @@ def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> D
             "python3": e.python3,
             "execution_path": e.execution_path,
             "hash_id": e.hash_id,
+            "source": e.source,
         })
     cfg["scripts"] = scripts_out
     return cfg

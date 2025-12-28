@@ -5,26 +5,25 @@
 """Interactive search for scripts.
 
 Behavior:
-- `aris search` starts an interactive loop.
-- User types search query and presses Enter.
-- Results appear below with highlighted matches.
-- Type a new query to search again.
-- Type 'exit' or Ctrl+C to quit.
-- Type a number to select that result.
+- `aris search` starts an interactive real-time search.
+- Results update as you type each character.
+- Uses curses for proper terminal handling.
+- Press Enter/TAB to select top result.
+- Press ESC or Ctrl+C to quit.
 
-Simple and reliable approach.
+Clean, real-time search with proper terminal handling.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import curses
 from pathlib import Path
 
 from utils import (
     load_config,
     build_script_index,
-    highlight_token,
     snippet_around,
 )
 
@@ -65,8 +64,136 @@ def score_match(name: str, desc: str, token: str) -> tuple[int, int, int]:
     return (primary, idx, len(name))
 
 
+def search_curses(stdscr, entries):
+    """Run curses-based real-time search.
+    
+    Args:
+        stdscr: curses window object
+        entries: List of ScriptEntry objects
+        
+    Returns:
+        Selected script name or None
+    """
+    # Setup
+    curses.curs_set(1)  # Show cursor
+    stdscr.nodelay(False)
+    stdscr.keypad(True)
+    
+    # Color setup
+    if curses.has_colors():
+        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_CYAN, curses.COLOR_BLACK)
+    
+    search_query = ""
+    selected_script = None
+    
+    while True:
+        stdscr.clear()
+        height, width = stdscr.getmaxyx()
+        
+        # Header
+        header = "ARIS Search - Type to search (ESC/Ctrl+C: quit, Enter/TAB: select top)"
+        stdscr.addstr(0, 0, header[:width-1], curses.A_BOLD)
+        stdscr.addstr(1, 0, "=" * min(width-1, 70))
+        
+        # Search prompt
+        prompt = f"Search: {search_query}"
+        stdscr.addstr(3, 0, prompt[:width-1])
+        
+        # Find and display matches
+        if search_query:
+            matches = []
+            for e in entries:
+                if search_query.lower() in e.name.lower() or \
+                   search_query.lower() in (e.description or "").lower():
+                    matches.append(e)
+            
+            matches.sort(key=lambda e: score_match(e.name, e.description or "", search_query))
+            
+            if matches:
+                stdscr.addstr(4, 0, f"Found {len(matches)} result(s):", curses.A_DIM)
+                
+                # Display up to 10 results
+                max_results = min(10, height - 7)
+                line = 6
+                for i, e in enumerate(matches[:max_results]):
+                    if line >= height - 1:
+                        break
+                    
+                    # Format the result
+                    src = f" [{e.source}]" if e.source != "local" else ""
+                    result_line = f"  {i+1}. {e.name}{src}"
+                    
+                    # Highlight the match in the name
+                    if search_query.lower() in e.name.lower():
+                        # Find position of match
+                        idx = e.name.lower().index(search_query.lower())
+                        before = result_line[:result_line.index(e.name) + idx]
+                        match = result_line[len(before):len(before) + len(search_query)]
+                        after = result_line[len(before) + len(search_query):]
+                        
+                        stdscr.addstr(line, 0, before[:width-1])
+                        if curses.has_colors():
+                            stdscr.addstr(match[:width-1-len(before)], curses.color_pair(1) | curses.A_BOLD)
+                        else:
+                            stdscr.addstr(match[:width-1-len(before)], curses.A_REVERSE)
+                        stdscr.addstr(after[:width-1-len(before)-len(match)])
+                    else:
+                        stdscr.addstr(line, 0, result_line[:width-1])
+                    
+                    line += 1
+                    
+                    # Show description snippet if match is in description
+                    if line < height - 1 and search_query.lower() in (e.description or "").lower():
+                        snip = snippet_around(e.description or "", search_query, radius=40)
+                        desc_line = f"     {snip}"
+                        stdscr.addstr(line, 0, desc_line[:width-1], curses.A_DIM)
+                        line += 1
+                
+                if len(matches) > max_results:
+                    if line < height - 1:
+                        stdscr.addstr(line, 0, f"     ... and {len(matches) - max_results} more", curses.A_DIM)
+            else:
+                stdscr.addstr(5, 0, "  No matches found", curses.A_DIM)
+        else:
+            stdscr.addstr(5, 0, "  Start typing to search...", curses.A_DIM)
+        
+        # Position cursor at end of search query
+        stdscr.move(3, len(prompt))
+        stdscr.refresh()
+        
+        # Get input
+        try:
+            ch = stdscr.getch()
+        except KeyboardInterrupt:
+            break
+        
+        # Handle input
+        if ch == 27:  # ESC
+            break
+        elif ch in (curses.KEY_ENTER, 10, 13):  # Enter
+            if search_query and matches:
+                selected_script = matches[0].name
+                break
+        elif ch == 9:  # TAB
+            if search_query and matches:
+                selected_script = matches[0].name
+                break
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):  # Backspace
+            if search_query:
+                search_query = search_query[:-1]
+        elif ch == curses.KEY_RESIZE:
+            # Handle terminal resize
+            continue
+        elif 32 <= ch <= 126:  # Printable characters
+            search_query += chr(ch)
+    
+    return selected_script
+
+
 def interactive_search(root: Path) -> int:
-    """Run interactive search loop with simple input.
+    """Run interactive search with curses for real-time updates.
 
     Args:
         root: Repository root.
@@ -78,123 +205,21 @@ def interactive_search(root: Path) -> int:
     cfg = load_config(root)
     entries = build_script_index(root, cfg)
 
-    print("=" * 70)
-    print("ARIS Script Search")
-    print("=" * 70)
-    print("Type your search query and press Enter.")
-    print("Type a number (1-10) to select that result.")
-    print("Type 'exit', 'quit', or press Ctrl+C to quit.\n")
-
-    while True:
-        try:
-            query = input("search> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nExiting search.")
-            return 0
-
-        if query.lower() in {"exit", "quit", "q"}:
-            return 0
-
-        if not query:
-            continue
-
-        # Check if user typed a number to select a previous result
-        if query.isdigit():
-            print("Please search first, then type a number to select.")
-            continue
-
-        # Find matches
-        matches = []
-        for e in entries:
-            if query.lower() in e.name.lower() or query.lower() in (e.description or "").lower():
-                matches.append(e)
-
-        matches.sort(key=lambda e: score_match(e.name, e.description or "", query))
-
-        if not matches:
-            print("  No matches found.\n")
-            continue
-
-        # Display results with numbers
-        print(f"\nFound {len(matches)} result(s):\n")
-        max_display = 10
-        for i, e in enumerate(matches[:max_display], 1):
-            src = f"[{e.source}]" if e.source != "local" else ""
-            name_h = highlight_token(e.name, query)
-            desc = e.description or ""
-            
-            if query.lower() in desc.lower():
-                snip = snippet_around(desc, query, radius=60)
-                snip_h = highlight_token(snip, query)
-                print(f"  {i}. {name_h} {src}")
-                print(f"     {snip_h}")
-            else:
-                print(f"  {i}. {name_h} {src}")
-
-        if len(matches) > max_display:
-            print(f"\n  ... and {len(matches) - max_display} more (refine your search)")
-
-        # Prompt for selection
-        print()
-        try:
-            selection = input("Select [1-10] or search again> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nExiting search.")
-            return 0
-
-        if selection.lower() in {"exit", "quit", "q"}:
-            return 0
-
-        # Check if selection is a number
-        if selection.isdigit():
-            idx = int(selection) - 1
-            if 0 <= idx < min(len(matches), max_display):
-                selected = matches[idx]
-                print(f"\n{'=' * 70}")
-                print(f"Selected: {selected.name}")
-                print(f"Command:  aris {selected.name}")
-                print(f"{'=' * 70}\n")
-                return 0
-            else:
-                print(f"Invalid selection. Please choose 1-{min(len(matches), max_display)}.\n")
+    try:
+        selected = curses.wrapper(search_curses, entries)
+        
+        if selected:
+            print(f"\n{'=' * 70}")
+            print(f"Selected: {selected}")
+            print(f"Command:  aris {selected}")
+            print(f"{'=' * 70}\n")
         else:
-            # Treat as new search query
-            query = selection
-            if not query:
-                continue
-
-            # Find matches for new query
-            matches = []
-            for e in entries:
-                if query.lower() in e.name.lower() or query.lower() in (e.description or "").lower():
-                    matches.append(e)
-
-            matches.sort(key=lambda e: score_match(e.name, e.description or "", query))
-
-            if not matches:
-                print("  No matches found.\n")
-                continue
-
-            # Display results
-            print(f"\nFound {len(matches)} result(s):\n")
-            for i, e in enumerate(matches[:max_display], 1):
-                src = f"[{e.source}]" if e.source != "local" else ""
-                name_h = highlight_token(e.name, query)
-                desc = e.description or ""
-                
-                if query.lower() in desc.lower():
-                    snip = snippet_around(desc, query, radius=60)
-                    snip_h = highlight_token(snip, query)
-                    print(f"  {i}. {name_h} {src}")
-                    print(f"     {snip_h}")
-                else:
-                    print(f"  {i}. {name_h} {src}")
-
-            if len(matches) > max_display:
-                print(f"\n  ... and {len(matches) - max_display} more (refine your search)")
-            print()
-
-    return 0
+            print("\nSearch cancelled.\n")
+        
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 def main() -> None:

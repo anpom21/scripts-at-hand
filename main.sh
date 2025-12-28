@@ -6,7 +6,14 @@ set -euo pipefail
 # - Routes subcommands: search, refresh, completion.
 # - Runs scripts as: aris <script> [args...]
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Follow symlinks to find the real script location
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+ROOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
 export ARIS_ROOT="$ROOT_DIR"
 
 PYTHON_BIN="${ARIS_PYTHON:-python3}"
@@ -20,9 +27,6 @@ scripts: []
 YAML
 fi
 
-# Refresh on every run (fast; uses file mtimes)
-"$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" >/dev/null || true
-
 if [[ $# -eq 0 ]]; then
   "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --list
   echo
@@ -30,23 +34,43 @@ if [[ $# -eq 0 ]]; then
   exit 0
 fi
 
-SUBCMD="$1"; shift || true
+SUBCMD="$1"
+
+# Handle flags first
+case "$SUBCMD" in
+  --list)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --list
+    exit 0
+    ;;
+  --refresh)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
+    echo
+    echo "Updating bash completion..."
+    eval "$("$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" bash)"
+    echo "✓ Completion updated"
+    exit 0
+    ;;
+  --help|-h|help)
+    "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" -h
+    exit 0
+    ;;
+esac
+
+# Now shift to get the script/command
+shift || true
 
 case "$SUBCMD" in
   search)
     "$PYTHON_BIN" "$ROOT_DIR/src/search.py" --root "$ROOT_DIR" "$@"
     ;;
-  refresh)
-    "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" "$@"
-    ;;
   completion)
     "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" "$@"
-    ;;
-  -h|--help|help)
-    "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" -h
     ;;
   *)
     # Treat as a script name.
     "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --script "$SUBCMD" -- "$@"
     ;;
 esac
+

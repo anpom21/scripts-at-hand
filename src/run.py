@@ -88,19 +88,41 @@ def main() -> None:
         None
     """
 
+    description = """Unified runner for ARIS production scripts.
+
+Execute aris scripts with: aris <script> <args>
+
+Example:
+  aris collection_annots_overview.py <collection_dir>
+  aris 2_rename_files.py --help
+  aris segment.py --input images/ --output labels/
+
+Options:
+  --list              List all available scripts
+  --refresh           Refresh script index and show changes
+  search              Interactive search for scripts
+  completion bash     Generate bash completion script
+  --help, -h          Show this help message"""
+
     ap = argparse.ArgumentParser(
         prog="aris",
-        description="Unified runner for ARIS production scripts.",
-        formatter_class=argparse.RawTextHelpFormatter,
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
     )
-    ap.add_argument("--root", required=True, help="Path to aris-cli repo root")
-    ap.add_argument("--list", action="store_true", help="List all scripts")
-    ap.add_argument("--script", help="Script name to run")
+    ap.add_argument("--root", required=True, help=argparse.SUPPRESS)
+    ap.add_argument("--list", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--script", help=argparse.SUPPRESS)
     ap.add_argument("--", dest="_sep", action="store_true", help=argparse.SUPPRESS)
-    ap.add_argument("args", nargs=argparse.REMAINDER, help="Args passed to the script")
+    ap.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
+    ap.add_argument("-h", "--help", action="store_true", help=argparse.SUPPRESS)
 
     args = ap.parse_args()
     root = Path(args.root)
+
+    if args.help:
+        print(description)
+        return
 
     if args.list:
         raise SystemExit(list_scripts(root))

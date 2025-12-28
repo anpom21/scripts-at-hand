@@ -104,20 +104,24 @@ The script receives all remaining arguments unchanged and executes from its `exe
 - Ensures `.sh` scripts are executable.
 - Ensures `logs/<script_name>/` exists for each script.
 - Detects script content collisions using SHA256 hashes.
+- **Shows change summary**: When scripts are added or removed, displays:
+  - Bold green success message
+  - `+ script_name [source]` in green for added scripts
+  - `- script_name [source]` in red for removed scripts
 
 ## Interactive Search
 
-`aris search` provides a simple, effective search experience:
+`aris search` provides a real-time, clean search experience using curses:
 
-- Type your search query and press Enter
-- Results appear numbered 1-10 with highlighted matches
-- Type a number (e.g., `3`) to select that result
-- Or type a new search query to refine your search
-- Type `exit`, `quit`, or press Ctrl+C to exit
-- Searches in both script names and descriptions
-- Selected commands are clearly displayed: `aris <script_name>`
+- **Real-time updates**: Results appear instantly as you type each character
+- **Clean display**: Screen updates in-place without cascading text
+- **Numbered results**: Up to 10 results shown, numbered for reference
+- **Highlighted matches**: Search term highlighted in red/bold
+- **Easy selection**: Press Enter or TAB to select the top match
+- **Quick exit**: Press ESC or Ctrl+C to quit
+- **Terminal-aware**: Adapts to your terminal size
 
-This approach is reliable, works in all terminals, and provides clear selection feedback.
+The search uses Python's curses library for proper terminal handling, providing a smooth, flicker-free experience similar to tools like `fzf`.
 
 ## Features
 
