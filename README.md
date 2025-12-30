@@ -4,8 +4,23 @@ A lightweight, repo-local CLI that consolidates many production scripts (Python 
 
 - `aris` lists scripts and shows usage
 - `aris <script_name> [args...]` runs a script
-- `aris search` opens an interactive real-time search UI
+- `aris search` opens an interactive real-time search UI with tag-based filtering
 - `aris refresh` updates `config.yaml` and permissions
+- `aris --config` opens config file in your default editor
+
+## Recent Features
+
+✨ **Shortcuts** - Create short aliases for scripts: `aris summarise` instead of `aris 0_summarise_imgs_and_annots.py`
+
+🏷️ **Tags** - Organize scripts with tags for powerful search filtering and categorization
+
+🎨 **Smart Search** - Tags and source repositories are searchable with color-coded results (cyan for tags, yellow for sources)
+
+💾 **Format Preservation** - Config file maintains your comments, blank lines, and custom formatting
+
+🔧 **Quick Config Access** - `aris -c` opens config.yaml instantly
+
+🔄 **Smart Reset** - `aris --reset-config` refreshes paths while preserving shortcuts and tags
 
 ## Repository Layout
 
@@ -128,7 +143,250 @@ The script receives all remaining arguments unchanged and executes from its `exe
 
 The search uses Python's curses library for proper terminal handling, providing a smooth, flicker-free experience similar to tools like `fzf`.
 
-## Features
+## Advanced Features
+
+### Script Shortcuts
+
+Create short aliases for frequently-used scripts by adding a `shortcut` field in `config.yaml`:
+
+```yaml
+scripts:
+- name: 0_summarise_imgs_and_annots.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+  execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
+  hash_id: 392807cfb50f39822e08a6c9efb39986cd83f5c0de13ef3148ba42e091575acf
+  source: local
+  shortcut: summarise
+  tags: [training_bible, organize_data]
+```
+
+**Usage:**
+```bash
+# Instead of typing the full name:
+aris 0_summarise_imgs_and_annots.py --help
+
+# Use the shortcut:
+aris summarise --help
+```
+
+**Collision Detection:**
+- Shortcuts must be unique across all scripts
+- Cannot conflict with reserved commands: `search`, `refresh`, `completion`, `help`
+- Cannot conflict with existing script names
+- Conflicts are automatically disabled with warnings printed to stderr
+
+**Autocompletion:**
+- Shortcuts are included in bash completion
+- Type `aris sum` + TAB → completes to `aris summarise`
+
+**Display:**
+- `aris --list` shows shortcuts in dim gray next to script names
+- Example: `0_summarise_imgs_and_annots.py (summarise)`
+
+### Tags and Categorization
+
+Organize scripts with tags for better search and discovery:
+
+```yaml
+scripts:
+- name: 0_summarise_imgs_and_annots.py
+  shortcut: summarise
+  tags: [training_bible, organize_data, move]
+```
+
+**Search Priority:**
+- Tags have the highest search priority (even higher than script names)
+- Searching for a tag instantly brings up all tagged scripts
+- Matching tags are displayed in **bold cyan** in search results
+
+**Source as Special Tag:**
+- Non-local sources (repository names) automatically act as searchable tags
+- Displayed in **bold yellow** when they match your search
+- Search for "annotation" to find all scripts from the Annotation repository
+- Search for "classification" to find all Classification scripts
+
+**Tag Display in Search:**
+```
+1. segment.py [Annotation]
+   tags: Annotation  (in bold yellow)
+
+2. 0_summarise_imgs_and_annots.py
+   tags: training_bible, organize_data, move  (matching tags in bold cyan)
+```
+
+### Configuration Management
+
+#### Quick Config Access
+Open the config file quickly without remembering the path:
+
+```bash
+aris --config    # Opens config.yaml in default editor
+aris -c          # Short form
+```
+
+Prints: `Opening config: /home/simon/aris-cli/config.yaml`
+
+Uses the best available editor:
+1. `$EDITOR` environment variable (if set)
+2. `xdg-open` (Linux GUI applications)
+3. `open` (macOS)
+4. Fallbacks: `vim`, `nano`, `vi`
+
+#### Reset Configuration
+Reset per-script overrides while preserving shortcuts and tags:
+
+```bash
+aris --reset-config
+```
+
+This resets:
+- `python3` path
+- `execution_path`
+- `name` (script name)
+- `hash_id`
+- `source`
+
+But **preserves**:
+- `shortcut`
+- `tags`
+
+Useful when:
+- Python environment changes
+- Scripts are moved to different directories
+- Repository structure is reorganized
+
+#### YAML Formatting Preservation
+
+The config file now preserves your custom formatting:
+- **Comments** are maintained (including header comments)
+- **Blank lines** between entries are preserved
+- **Indentation** and structure remain unchanged
+- **Tags** stay in inline format: `tags: [tag1, tag2, tag3]`
+
+You can safely add comments and organize your config:
+
+```yaml
+# ---------------------------------------------------------------------------- #
+#                                 Repositories                                 #
+# ---------------------------------------------------------------------------- #
+repositories:
+- name: Annotation
+  path: /home/simon/Annotation
+  python3: /home/simon/Annotation/.venv/bin/python3
+  scripts:
+  - segment.py
+  - review_annotations.py
+
+- name: Synthetics
+  path: /home/simon/Documents/Synthetics
+  python3: /home/simon/Documents/Synthetics/.venv/bin/python3
+  scripts:
+  - run.sh
+  - synthesize.py
+
+# ---------------------------------------------------------------------------- #
+#                                    Scripts                                   #
+# ---------------------------------------------------------------------------- #
+scripts:
+- name: segment.py
+  source: Annotation
+  shortcut: segment
+  tags: [ml, annotation]
+
+- name: synthesize.py
+  source: Synthetics
+  shortcut: synth
+  tags: [data_generation, training]
+```
+
+Running `aris --refresh` will **not** remove your comments or blank lines!
+
+### Enhanced Search Features
+
+The interactive search (`aris search`) includes several powerful features:
+
+**Search Priority (highest to lowest):**
+1. **Tags and Source** - Scripts with matching tags or source repositories appear first
+2. **Script Name** - Scripts with matches in their name
+3. **Description** - Scripts with matches in their description
+4. **Shortcuts** - Scripts with shortcuts always rank higher within their priority group
+
+**Color Coding:**
+- **Red**: Matching text in script names
+- **Cyan**: Matching tags
+- **Yellow**: Matching source (repository name)
+- **Dim Gray**: Non-matching metadata (descriptions, tags, sources)
+
+**Example Search Results:**
+```
+Search: training
+
+Found 5 result(s):
+
+  1. 0_summarise_imgs_and_annots.py [local]
+     tags: training_bible, organize_data, move
+  
+  2. train.py [Classification]
+     tags: Classification
+     
+  3. generate_training_data.py [local]
+     Generates synthetic training data for model...
+```
+
+### Error Handling
+
+**Friendly YAML Errors:**
+If there's a syntax error in `config.yaml`, you'll see a helpful colored error message instead of a Python traceback:
+
+```
+[ERROR] Config syntax is incorrect
+  mapping values are not allowed here
+    in "/home/simon/aris-cli/config.yaml", line 15, column 22
+
+   12:   python3: /home/simon/Annotation/.venv/bin/python3
+   13:   scripts:
+   14:   - segment.py
+-> 15:   - review_annotations.py: invalid
+   16: scripts:
+   17: - name: segment.py
+```
+
+**Debug Mode:**
+Set `ARIS_DEBUG=1` to see full Python tracebacks for troubleshooting:
+
+```bash
+ARIS_DEBUG=1 aris --refresh
+```
+
+## Command Reference
+
+```bash
+# Run a script
+aris <script_name> [args...]
+aris <shortcut> [args...]
+
+# List all scripts
+aris --list
+
+# Interactive search
+aris search
+
+# Open config file
+aris --config
+aris -c
+
+# Refresh script index
+aris --refresh
+
+# Reset configuration (keeps shortcuts and tags)
+aris --reset-config
+
+# Show help
+aris --help
+aris -h
+```
+
+## Core Features Summary
 
 ### Smart Script Naming
 - Scripts maintain their original filenames
