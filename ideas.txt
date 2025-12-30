@@ -1,5 +1,3 @@
 Ideas: 
-- Add tags as a list in configs where each script can be given tags
-    - Additionally make the tags searchable.
 - Make config refresh messages also include changes to repositories
 - Make sure refresh updates scripts new python path if the repository python path has changed

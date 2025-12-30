@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Validates folder structure and filename conventions for collection/capture datasets with detailed error reporting."""
 import os
 import re
 import argparse
 from collections import defaultdict
 from pathlib import Path
 
+
+BOLD = '\033[1m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+RESET = '\033[0m'
 
 class DataValidator:
     """Validates data structure and filename conventions for collection/capture folders."""
@@ -14,19 +18,25 @@ class DataValidator:
     IMG_PATTERN = re.compile(r'^img_[a-zA-Z0-9\-]+_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}\.png$')
     ANNOT_PATTERN = re.compile(r'^annot_[a-zA-Z0-9\-]+_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}\.json$')
     
-    def __init__(self, base_dir, mode='collection'):
+    def __init__(self, base_dir, mode='collection', verbose=False):
         """
         Initialize validator.
         
         Args:
             base_dir: Path to collection or capture folder
             mode: 'collection' or 'capture' - determines validation level
+            verbose: If True, print detailed category information
         """
+        
         self.base_dir = Path(base_dir).resolve()
         self.mode = mode
+        self.verbose = verbose
         self.errors = []
         self.warnings = []
         self.stats = defaultdict(int)
+        self.filename_registry = {}  # Maps filename -> list of (path, mtime) tuples
+        self.all_categories = set()  # Track unique categories across all splits
+        self.split_categories = {}  # Maps split name -> set of categories
     
     def _format_path(self, path, capture_name=None, obj_name=None):
         """
@@ -53,9 +63,14 @@ class DataValidator:
             self._validate_collection()
         elif self.mode == 'capture':
             self._validate_capture()
+        elif self.mode == 'train':
+            self._validate_train()
         else:
             self.errors.append(f"Invalid mode: {self.mode}")
             return False
+        
+        # Check for duplicate filenames after traversing all folders
+        self._check_for_duplicates()
             
         return len(self.errors) == 0
     
@@ -76,6 +91,83 @@ class DataValidator:
     def _validate_capture(self):
         """Validate a single capture folder."""
         self._validate_capture_folder(self.base_dir)
+    
+    def _validate_train(self):
+        """Validate training data structure (train/val/test splits)."""
+        # Expected split folders
+        expected_splits = ['train', 'val', 'test']
+        found_splits = []
+        
+        for split_name in expected_splits:
+            split_path = self.base_dir / split_name
+            if split_path.exists() and split_path.is_dir():
+                found_splits.append(split_name)
+                self._validate_split_folder(split_path, split_name)
+            else:
+                # It's okay if split doesn't exist, but note it
+                self.warnings.append(f"Split folder '{split_name}' not found at: {split_path}")
+        
+        if not found_splits:
+            self.errors.append(f"No split folders (train/val/test) found in: {self.base_dir}")
+            return
+        
+        self.stats['split_folders'] = len(found_splits)
+    
+    def _validate_split_folder(self, split_path, split_name):
+        """Validate a split folder (train/val/test) - recursively find all images and annotations."""
+        # Recursively find all images and annotations
+        all_images = list(split_path.glob("**/*.png"))
+        all_annots = list(split_path.glob("**/*.json"))
+        
+        if not all_images and not all_annots:
+            self.warnings.append(f"Split folder '{split_name}' is empty: {split_path}")
+            return
+        
+        # Track categories found in this split
+        categories_in_split = set()
+        
+        # Process all images
+        for img_path in all_images:
+            # Determine category: parent folder, or parent's parent if parent is "images"
+            parent = img_path.parent
+            if parent.name == "images":
+                category_name = parent.parent.name
+            else:
+                category_name = parent.name
+            
+            # Skip augmentation_backgrounds and background
+            if category_name in ["augmentation_backgrounds", "background"]:
+                continue
+            
+            self._register_file(img_path)
+            categories_in_split.add(category_name)
+            self.all_categories.add(category_name)  # Track globally
+            self.stats['total_images'] += 1
+            self.stats[f'{split_name}_images'] = self.stats.get(f'{split_name}_images', 0) + 1
+        
+        # Process all annotations
+        for annot_path in all_annots:
+            # Determine category: parent folder, or parent's parent if parent is "annots"
+            parent = annot_path.parent
+            if parent.name == "annots":
+                category_name = parent.parent.name
+            else:
+                category_name = parent.name
+            
+            # Skip augmentation_backgrounds and background
+            if category_name in ["augmentation_backgrounds", "background"]:
+                continue
+            
+            self._register_file(annot_path)
+            categories_in_split.add(category_name)
+            self.all_categories.add(category_name)  # Track globally
+            self.stats['total_annots'] += 1
+            self.stats[f'{split_name}_annots'] = self.stats.get(f'{split_name}_annots', 0) + 1
+        
+        # Update category statistics for this split
+        self.stats[f'{split_name}_categories'] = len(categories_in_split)
+        self.split_categories[split_name] = categories_in_split  # Store for verbose output
+
     
     def _validate_capture_folder(self, capture_path):
         """Validate structure of a capture folder."""
@@ -111,6 +203,7 @@ class DataValidator:
         self.stats['background_images'] += len(images)
         
         for img in images:
+            self._register_file(img)  # Register for duplicate detection
             self._validate_filename(img, capture_name, 'image', bg_path, capture_path, 'background')
     
     def _validate_object_folder(self, obj_path, capture_name, capture_path):
@@ -151,6 +244,7 @@ class DataValidator:
         self.stats['object_images'] += len(images)  # Track object images separately
         
         for img in images:
+            self._register_file(img)  # Register for duplicate detection
             self._validate_filename(img, capture_name, 'image', obj_path, capture_path, obj_name)
     
     def _validate_annots_folder(self, annots_path, capture_name, obj_path, capture_path, obj_name):
@@ -164,6 +258,7 @@ class DataValidator:
         self.stats['total_annots'] += len(annots)
         
         for annot in annots:
+            self._register_file(annot)  # Register for duplicate detection
             self._validate_filename(annot, capture_name, 'annot', obj_path, capture_path, obj_name)
     
     def _validate_filename(self, file_path, capture_name, file_type, parent_path, capture_path, obj_name):
@@ -218,8 +313,66 @@ class DataValidator:
         
         self.stats['valid_filenames'] += 1
     
+    def _register_file(self, file_path):
+        """Register a file for duplicate detection."""
+        filename = file_path.name
+        mtime = os.path.getmtime(file_path)
+        
+        if filename not in self.filename_registry:
+            self.filename_registry[filename] = []
+        
+        self.filename_registry[filename].append((file_path, mtime))
+    
+    def _check_for_duplicates(self):
+        """Check for duplicate filenames across all folders."""
+        duplicates_found = False
+        
+        for filename, occurrences in sorted(self.filename_registry.items()):
+            if len(occurrences) > 1:
+                duplicates_found = True
+                self.stats['duplicate_files'] = self.stats.get('duplicate_files', 0) + 1
+                
+                
+
+                # Create warning message with all duplicate paths
+                warning_lines = [f"DUPLICATE FILENAME FOUND: {filename}"]
+
+                splits_with_duplicate = []
+                for path, mtime in occurrences:
+                    from datetime import datetime
+                    mod_date = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                    warning_lines.append(f"  Path: {path}")
+                    warning_lines.append(f"  Modified: {BOLD}{mod_date}{RESET}")
+                    
+                    if self.mode == 'train':
+                        # Determine split from path
+                        relative_parts = path.relative_to(self.base_dir).parts
+                        if relative_parts:
+                            possible_split = relative_parts[0]
+                            if possible_split in ['train', 'val', 'test']:
+                                splits_with_duplicate.append(possible_split)
+                
+                # Check if there are different train/test/val entries in split array
+                if self.mode == 'train' and len(set(splits_with_duplicate)) > 1:
+                    warning_lines.append(f"  {RED}{BOLD}   CRITICAL: Duplicate found across different splits: {', '.join(sorted(set(splits_with_duplicate)))}{RESET}")
+                    # This is a critical error - treat it as an error not a warning
+                    self.errors.append('\n'.join(warning_lines))
+                    self.stats['cross_split_duplicates'] = self.stats.get('cross_split_duplicates', 0) + 1
+                else:
+                    # Regular duplicate within same split/folder - just a warning
+                    warning_lines.append(f"  {YELLOW}Duplicate found in: {', '.join(sorted(set(splits_with_duplicate)))}{RESET}")
+
+                    self.warnings.append('\n'.join(warning_lines))
+
+    
     def print_report(self):
         """Print validation report."""
+        BOLD = '\033[1m'
+        YELLOW = '\033[93m'
+        RED = '\033[91m'
+        RESET = '\033[0m'
+        GREEN = '\033[92m'
+
         print("\n" + "=" * 70)
         print("DATA STRUCTURE VALIDATION REPORT")
         print("=" * 70)
@@ -231,18 +384,91 @@ class DataValidator:
         print("\nSTATISTICS:")
         if self.mode == 'collection':
             print(f"  Capture folders: {self.stats['capture_folders']}")
-        print(f"  Object folders: {self.stats['object_folders']}")
-        if self.stats['background_folders'] > 0:
-            print(f"  Background folders: {self.stats['background_folders']}")
+            print(f"  Object folders: {self.stats['object_folders']}")
+            if self.stats['background_folders'] > 0:
+                print(f"  Background folders: {self.stats['background_folders']}")
+        elif self.mode == 'train':
+            if self.stats.get('split_folders', 0) > 0:
+                print(f"  Split folders found: {self.stats['split_folders']}")
+            if len(self.all_categories) > 0:
+                print(f"  Total unique categories: {len(self.all_categories)}")
+                # Show per-split breakdown
+                for split in ['train', 'val', 'test']:
+                    if self.stats.get(f'{split}_categories', 0) > 0:
+                        print(f"    - {split}: {self.stats[f'{split}_categories']} categories")
+                
+                # Verbose: show actual category names
+                if self.verbose:
+                    # ANSI color codes
+                    GREEN = '\033[92m'
+                    BLUE = '\033[94m'
+                    YELLOW = '\033[93m'
+                    RESET = '\033[0m'
+                    
+                    # Determine which categories are in which splits
+                    train_cats = self.split_categories.get('train', set())
+                    val_cats = self.split_categories.get('val', set())
+                    test_cats = self.split_categories.get('test', set())
+                    
+                    # Find common and unique categories
+                    common_train_val = train_cats & val_cats
+                    train_only = train_cats - val_cats - test_cats
+                    val_only = val_cats - train_cats - test_cats
+                    
+                    print(f"\n  Categories found:")
+                    for split in ['train', 'val', 'test']:
+                        if split in self.split_categories and self.split_categories[split]:
+                            categories = sorted(self.split_categories[split])
+                            print(f"    {split}:")
+                            for cat in categories:
+                                # Color code based on presence in splits
+                                if cat in common_train_val:
+                                    color = GREEN
+                                    marker = "✓"
+                                elif split == 'train' and cat in train_only:
+                                    color = BLUE
+                                    marker = "■"
+                                elif split == 'val' and cat in val_only:
+                                    color = YELLOW
+                                    marker = "▲"
+                                else:
+                                    color = RESET
+                                    marker = "-"
+                                
+                                print(f"      {color}{marker} {cat}{RESET}")
+        else:  # capture mode
+            print(f"  Object folders: {self.stats['object_folders']}")
+            if self.stats['background_folders'] > 0:
+                print(f"  Background folders: {self.stats['background_folders']}")
+        
         print(f"  Total images: {self.stats['total_images']}")
-        if self.stats['background_images'] > 0:
-            print(f"    - Background images: {self.stats['background_images']}")
-        if self.stats['object_images'] > 0:
-            print(f"    - Object images: {self.stats['object_images']}")
+        if self.mode == 'train':
+            # Show per-split image breakdown
+            for split in ['train', 'val', 'test']:
+                if self.stats.get(f'{split}_images', 0) > 0:
+                    print(f"    - {split}: {self.stats[f'{split}_images']} images")
+        else:
+            if self.stats['background_images'] > 0:
+                print(f"    - Background images: {self.stats['background_images']}")
+            if self.stats['object_images'] > 0:
+                print(f"    - Object images: {self.stats['object_images']}")
+        
         print(f"  Total annotations: {self.stats['total_annots']}")
-        print(f"  Valid filenames: {self.stats['valid_filenames']}")
-        if self.stats['invalid_filenames'] > 0:
-            print(f"  Invalid filenames: {self.stats['invalid_filenames']}")
+        if self.mode == 'train':
+            # Show per-split annotation breakdown
+            for split in ['train', 'val', 'test']:
+                if self.stats.get(f'{split}_annots', 0) > 0:
+                    print(f"    - {split}: {self.stats[f'{split}_annots']} annotations")
+        
+        if self.mode != 'train':
+            print(f"  Valid filenames: {self.stats['valid_filenames']}")
+            if self.stats['invalid_filenames'] > 0:
+                print(f"  Invalid filenames: {self.stats['invalid_filenames']}")
+        
+        if self.stats.get('duplicate_files', 0) > 0:
+            print(f"  Duplicate filenames found: {self.stats['duplicate_files']}")
+            if self.stats.get('cross_split_duplicates', 0) > 0:
+                print(f"    {RED}  Cross-split duplicates (CRITICAL): {self.stats['cross_split_duplicates']}{RESET}")
         
         # Print errors
         if self.errors:
@@ -250,11 +476,19 @@ class DataValidator:
             for error in self.errors:
                 print(f"  • {error}")
         else:
-            print("\n✅ No errors found!")
+            print(f"\n{GREEN} No errors found!{RESET}")
         
         # Separate empty folder warnings from other warnings
         empty_folder_warnings = [w for w in self.warnings if 'folder is empty' in w]
-        other_warnings = [w for w in self.warnings if 'folder is empty' not in w]
+        duplicate_warnings = [w for w in self.warnings if 'DUPLICATE FILENAME FOUND' in w]
+        other_warnings = [w for w in self.warnings 
+                         if 'folder is empty' not in w and 'DUPLICATE FILENAME FOUND' not in w]
+        
+        # Print duplicate warnings first (most critical)
+        if duplicate_warnings:
+            print(f"\n⚠️  DUPLICATE FILES DETECTED ({len(duplicate_warnings)}):")
+            for warning in duplicate_warnings:
+                print(f"\n{warning}")
         
         # Print non-empty folder warnings
         if other_warnings:
@@ -286,25 +520,36 @@ class DataValidator:
         # Final verdict
         if not self.errors and not self.warnings:
             print("✅ VALIDATION PASSED: Structure and filenames are correct!")
-        elif not self.errors and len(other_warnings) == 0 and len(empty_folder_warnings) > 0:
+        elif not self.errors and len(other_warnings) == 0 and len(duplicate_warnings) == 0 and len(empty_folder_warnings) > 0:
             print("✅ VALIDATION PASSED: Structure and filenames are correct!")
             print("   (Some folders are empty but this is acceptable)")
+        elif not self.errors and len(duplicate_warnings) > 0:
+            print("⚠️  VALIDATION PASSED WITH WARNINGS: Duplicate files detected!")
+            print("   It is imperative to remove duplicates before training.")
         elif not self.errors:
             print("⚠️  VALIDATION PASSED WITH WARNINGS: Check warnings above.")
-            print("   Consider using 2_rename_files.py to fix common filename issues.")
+            if self.mode != 'train':
+                print("   Consider using 2_rename_files.py to fix common filename issues.")
         else:
-            print("❌ VALIDATION FAILED: Fix errors above.")
-            print("   Consider using 1_organize_into_images_annots.py to fix structure issues.")
-            print("   Consider using 2_rename_files.py to fix common filename issues.")
+            # Check if errors include cross-split duplicates
+            if self.stats.get('cross_split_duplicates', 0) > 0:
+                print(f"{RED}{BOLD}❌ VALIDATION FAILED: CRITICAL - Cross-split duplicates detected!{RESET}")
+                print(f"   {RED}{BOLD}Found {self.stats['cross_split_duplicates']} file(s) duplicated across train/val/test splits.{RESET}")
+                print("   This will cause data leakage and MUST be fixed before training!")
+            else:
+                print("❌ VALIDATION FAILED: Fix errors above.")
+                if self.mode != 'train':
+                    print("   Consider using 1_organize_into_images_annots.py to fix structure issues.")
+                    print("   Consider using 2_rename_files.py to fix common filename issues.")
         print("=" * 70 + "\n")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Validate data structure and filename conventions for collection or capture folders.",
+        description="Validate data structure and filename conventions for collection, capture, or training data folders.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Expected folder structure:
+COLLECTION/CAPTURE MODE - Expected folder structure:
   collection/
   └── capture/
       ├── background/                    (optional)
@@ -321,7 +566,28 @@ Expected folder structure:
           ├── images/
           └── annots/
 
-Filename conventions:
+TRAIN MODE - Expected folder structure:
+  dataset/
+  ├── train/
+  │   ├── category1/
+  │   │   └── image1.png (...)
+  │   └── category2/
+  │       ├── images/
+  │       │   └── image1.png (...)
+  │       └── annots/
+  │           └── annot1.json (...)
+  ├── val/
+  │   └── category1/
+  │       └── image2.png (...)
+  └── test/
+      └── category1/
+          └── image3.png (...)
+
+Note: In train mode, images can be directly in category folders OR in an images/ subfolder.
+      Empty split folders (e.g., empty val/) are acceptable.
+      NO DUPLICATES are allowed across any folders.
+
+Filename conventions (collection/capture mode):
   Images:      img_<capture-name>_YYYY-MM-DDTHH-MM-SS-mmm.png
   Annotations: annot_<capture-name>_YYYY-MM-DDTHH-MM-SS-mmm.json
   
@@ -333,20 +599,26 @@ Example:
     
     parser.add_argument(
         "directory",
-        help="Path to collection or capture folder to validate"
+        help="Path to collection, capture, or training data folder to validate"
     )
     
     parser.add_argument(
         "--mode", "-m",
-        choices=['collection', 'capture'],
+        choices=['collection', 'capture', 'train'],
         default='capture',
-        help="Validation mode: 'collection' (has multiple captures) or 'capture' (single capture folder). Default: capture"
+        help="Validation mode: 'collection' (has multiple captures), 'capture' (single capture folder), or 'train' (train/val/test splits). Default: capture"
+    )
+    
+    parser.add_argument(
+        "--verbose", "-v",
+        action='store_true',
+        help="Print detailed information including category names for each split (train mode only)"
     )
     
     args = parser.parse_args()
     
     # Run validation
-    validator = DataValidator(args.directory, args.mode)
+    validator = DataValidator(args.directory, args.mode, args.verbose)
     is_valid = validator.validate()
     validator.print_report()
     

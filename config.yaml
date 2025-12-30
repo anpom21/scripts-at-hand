@@ -56,7 +56,7 @@ scripts:
   execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
   hash_id: 5d5c01dd6275db9fee49d7f5b00f8fc4f85aa5fe002b96a0e4bcf9f9a338e431
   source: local
-  shortcut: validate_folder
+  shortcut: validate
   tags: [training_bible, organize_data, read, validate]
 
 - name: build_inference_records.py
@@ -70,7 +70,7 @@ scripts:
 - name: capture_sorting_duplicates.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts
-  hash_id: c6c76ad0ead29373ed13c769ca124d34a2d5f7d2b13f5a0e84d2c2a0fd647147
+  hash_id: 7b2b3dab568c9bb5fb88b2a62767e05fba3afbddbaa8cffc07b254d661370250
   source: local
   shortcut: ''
   tags: [sorting, duplicates]
@@ -93,16 +93,16 @@ scripts:
 
 - name: collection_sorter.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris-cli/scripts/collection_sorter
-  hash_id: a450a5bfd1ab14a0716cd3e9181bbacea975d13a48ab3ad4b81360a18d2f712b
+  execution_path: /home/simon/Data
+  hash_id: 27db808601c40f85295bc7b7231962c5a1bc06f7e0ab07266e302316cae9229e
   source: local
   shortcut: sort
   tags: [gui, sorting, organize]
 
-- name: collection_sorter_capture_sorting_duplicates.py
+- name: collection_sorter_collection_sorter.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/collection_sorter
-  hash_id: 7b2b3dab568c9bb5fb88b2a62767e05fba3afbddbaa8cffc07b254d661370250
+  hash_id: a450a5bfd1ab14a0716cd3e9181bbacea975d13a48ab3ad4b81360a18d2f712b
   source: local
   shortcut: ''
   tags: []
@@ -146,6 +146,14 @@ scripts:
   source: local
   shortcut: ''
   tags: [yaml]
+
+- name: keep_newest_duplicates.py
+  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+  execution_path: /home/simon/aris-cli/scripts
+  hash_id: 7b2b3dab568c9bb5fb88b2a62767e05fba3afbddbaa8cffc07b254d661370250
+  source: local
+  shortcut: ''
+  tags: []
 
 - name: move_n_random_images_to_val.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3

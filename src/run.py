@@ -145,6 +145,7 @@ Example:
 Options:
   search              Interactive search for scripts
   --list              List all available scripts
+  --config, -c        Open config.yaml in default editor
   --refresh           Refresh script index and show changes
   --reset-config      Reset per-script config (python3, execution_path, name, hash_id, source) but keep shortcuts
   --help, -h          Show this help message"""

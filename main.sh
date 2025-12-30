@@ -43,6 +43,30 @@ SUBCMD="$1"
 
 # Handle flags first
 case "$SUBCMD" in
+  --config|-c)
+    CONFIG_PATH="$ROOT_DIR/config.yaml"
+    echo "Opening config: $CONFIG_PATH"
+    
+    # Try to find the default editor for YAML files
+    # Priority: EDITOR env var, xdg-open (Linux), open (macOS), fallback to vi
+    if [[ -n "${EDITOR:-}" ]]; then
+      exec "$EDITOR" "$CONFIG_PATH"
+    elif command -v xdg-open &> /dev/null; then
+      xdg-open "$CONFIG_PATH"
+    elif command -v open &> /dev/null; then
+      open "$CONFIG_PATH"
+    else
+      # Fallback to vi/vim/nano
+      if command -v vim &> /dev/null; then
+        exec vim "$CONFIG_PATH"
+      elif command -v nano &> /dev/null; then
+        exec nano "$CONFIG_PATH"
+      else
+        exec vi "$CONFIG_PATH"
+      fi
+    fi
+    exit 0
+    ;;
   --list)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --list
