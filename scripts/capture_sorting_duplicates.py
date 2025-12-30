@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Deduplicates images in capture folders by content hash, keeping newest files and removing copy suffixes."""
+
 """
 Deduplicate Images Script
 

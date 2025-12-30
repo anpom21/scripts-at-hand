@@ -1,6 +1,6 @@
 
 """
-Image capture and collection comparison tool Optional move/copy of images.
+Image comparison and optional move utility
 
 Features
 --------
@@ -13,12 +13,13 @@ Features
 
 Assumptions
 -----------
-A (original "Collections"):
+A (original "Collections") - supports multiple structures:
   A/
-    <subfolder>/
+    <subfolder>/              (can be a collection folder)
       <category>/
-        images/
+        images/               (preferred)
           <image files>
+        OR <image files>      (fallback: images directly in category)
 
 B ("Collection B"):
   B/
@@ -35,7 +36,7 @@ Destination:
 
 Usage
 -----
-# Compare only
+# Compare only (works with both nested and flat structures)
 python check_and_move_images.py /path/to/A "/path/to/Collection B"
 
 # Write a plain-text report listing B-only image paths
@@ -53,11 +54,26 @@ python check_and_move_images.py /path/to/A "/path/to/Collection B" --ext .png --
 # COPY images that exist ONLY in B (not in A) into DEST/<category>/images/ (DEFAULT)
 python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST
 
-# MOVE images that exist in BOTH A & B into DEST/<category>/images/
-python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST --exists-in-both
+# MOVE images that exist in BOTH A & B from B into DEST/<category>/images/
+python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST --exists-in-both --run
 
-# Dry-run (show what would be moved without changing anything)
-python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST --dry-run
+# Dry-run is DEFAULT (see what would happen without making changes)
+python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST
+
+# Use --run to actually execute the operations
+python check_and_move_images.py /path/to/A "/path/to/Collection B" --dest /path/to/DEST --run
+
+Examples
+--------
+# Move duplicate images (that exist in both A and B) from B to a backup folder:
+# Step 1: Preview (dry-run is default)
+python check_and_move_images.py /path/to/Andreas_Collection_Sorting /path/to/Collections_wood/collection-name --dest /path/to/backup_duplicates --exists-in-both
+
+# Step 2: Execute with --run flag
+python check_and_move_images.py /path/to/Andreas_Collection_Sorting /path/to/Collections_wood/collection-name --dest /path/to/backup_duplicates --exists-in-both --run
+
+# Copy unique images (only in B) to a new location:
+python check_and_move_images.py /path/to/Andreas_Collection_Sorting /path/to/Collections_wood/collection-name --dest /path/to/unique_images --run
 """
 
 from pathlib import Path
@@ -87,29 +103,47 @@ def index_A_images(A: Path, case_insensitive: bool, valid_exts: Set[str]) -> Tup
     Walk A and collect all image filenames and a map to their full paths.
       - names_A: set of normalized filenames (case as per flag)
       - paths_map: {normalized filename -> [full paths in A]}
-    Only files under images/ with extension in valid_exts are included.
+    
+    Handles multiple directory structures:
+    1. A/<subfolder>/<category>/images/  (nested collections)
+    2. A/<subfolder>/<category>/         (images directly in category)
+    3. A/<category>/images/              (single collection with images/)
+    4. A/<category>/                     (single collection, images directly in category)
     """
     names_A: Set[str] = set()
     paths_map: Dict[str, List[Path]] = {}
 
-    for sub in A.iterdir():
-        if not sub.is_dir():
-            continue
-        for category in sub.iterdir():
-            if not category.is_dir():
-                continue
-            images_dir = category / "images"
-            if not images_dir.is_dir():
-                #continue
-                images_dir = category  # Fallback: maybe images are directly here
-            for p in images_dir.iterdir():
-                if not p.is_file():
-                    continue
-                if p.suffix.lower() not in valid_exts:
-                    continue
+    def scan_for_images(base_dir: Path) -> None:
+        """Recursively scan for images in a directory structure."""
+        if not base_dir.is_dir():
+            return
+        
+        # Try to find images directly in this directory
+        found_images = False
+        for p in base_dir.iterdir():
+            if p.is_file() and p.suffix.lower() in valid_exts:
                 key = p.name.lower() if case_insensitive else p.name
                 names_A.add(key)
                 paths_map.setdefault(key, []).append(p)
+                found_images = True
+        
+        # If no images found directly, check subdirectories
+        if not found_images:
+            for sub in base_dir.iterdir():
+                if sub.is_dir():
+                    # Check for images/ subdirectory
+                    images_dir = sub / "images"
+                    if images_dir.is_dir():
+                        for p in images_dir.iterdir():
+                            if p.is_file() and p.suffix.lower() in valid_exts:
+                                key = p.name.lower() if case_insensitive else p.name
+                                names_A.add(key)
+                                paths_map.setdefault(key, []).append(p)
+                    else:
+                        # Recursively scan subdirectories
+                        scan_for_images(sub)
+    
+    scan_for_images(A)
     return names_A, paths_map
 
 def iter_B_images(B: Path, valid_exts: Set[str]) -> List[Path]:
@@ -155,7 +189,7 @@ def main(argv=None) -> int:
     parser.add_argument("--csv", action="store_true", help="Write report as CSV with extra columns")
     parser.add_argument("--dest", type=Path, default=None, help="Destination root where images will be copied/moved into <dest>/<category>/images/")
     parser.add_argument("--exists-in-both", action="store_true", help="When used with --dest, MOVE images found in BOTH A & B (instead of default: copy images only in B)")
-    parser.add_argument("--dry-run", action="store_true", help="Show actions without making any changes")
+    parser.add_argument("--run", action="store_true", help="Actually execute the move/copy operations (default is dry-run mode)")
     args = parser.parse_args(argv)
 
     A = args.A.expanduser().resolve()
@@ -170,7 +204,7 @@ def main(argv=None) -> int:
         return 2
     if dest_root and not dest_root.exists():
         try:
-            if not args.dry_run:
+            if args.run:
                 dest_root.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             print(f"Error: could not create destination root {dest_root}: {e}", file=sys.stderr)
@@ -178,8 +212,40 @@ def main(argv=None) -> int:
 
     valid_exts = set([e.lower() if e.startswith(".") else "." + e.lower() for e in (args.ext or DEFAULT_EXTS)])
 
+    # Determine if we're in dry-run mode (default unless --run is specified)
+    dry_run = not args.run
+
+    # Print operation summary
+    print("="*70)
+    print("IMAGE COMPARISON AND MOVE UTILITY")
+    print("="*70)
+    print(f"Collection A (reference): {A}")
+    print(f"Collection B (compare):   {B}")
+    if dest_root:
+        if args.exists_in_both:
+            print(f"\nOperation: MOVE duplicate images (found in BOTH A & B) from B to:")
+        else:
+            print(f"\nOperation: COPY unique images (found ONLY in B) to:")
+        print(f"           {dest_root}")
+        if dry_run:
+            print("\n[DRY RUN MODE - No files will be modified]")
+            print("Add --run flag to actually execute the operations")
+        else:
+            print("\n[LIVE MODE - Files will be modified!]")
+    else:
+        print(f"\nOperation: COMPARE ONLY (no files will be moved/copied)")
+    print("="*70)
+    print()
+
     names_A, paths_map = index_A_images(A, args.case_insensitive, valid_exts)
     b_images = iter_B_images(B, valid_exts)
+
+    # Check if no images found in Collection A
+    if len(names_A) == 0:
+        print(f"\nWARNING: No images found in Collection A: {A}", file=sys.stderr)
+        print(f"Please check your Collection A path.", file=sys.stderr)
+        print(f"The script now supports multiple directory structures.", file=sys.stderr)
+        return 1
 
     # Check if no images found in Collection B
     if len(b_images) == 0:
@@ -244,14 +310,14 @@ def main(argv=None) -> int:
             cat = category_name_for_B_image(p, B)
             dest_images = dest_root / cat / "images"
             try:
-                if not args.dry_run:
+                if not dry_run:
                     dest_images.mkdir(parents=True, exist_ok=True)
                 dest_path = dest_images / p.name
                 if dest_path.exists():
                     dest_path = unique_destination(dest_path)
                     totals["move_conflicts"] += 1
                 
-                if args.dry_run:
+                if dry_run:
                     action = "Move" if args.exists_in_both else "Copy"
                     print(f"  [DRY-RUN] {action} -> {dest_path}")
                 else:

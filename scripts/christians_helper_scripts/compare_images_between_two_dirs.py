@@ -4,25 +4,15 @@ Check if each image in Collection B exists in Collection A (original).
 Optionally write a summary file containing the *B-side paths* of images
 that are in B but not in A.
 
-Directory layout assumptions
-----------------------------
-A (original "Collections"):
-  A/
-    <subfolder>/
-      <category>/
-        images/
-          <image files>
-
-B ("Collection B")("Capture"):
-  B/
-    <category>/
-      images/
-        <image files>
+Directory layout
+----------------
+Both A and B can have any directory structure. The script will recursively
+search through all subdirectories (at any depth) to find image files.
 
 Behavior
 --------
-- For every file under B/*/images/, we check if a file with the **same filename**
-  exists anywhere under A/*/*/images/.
+- For every image file found under B, we check if a file with the **same filename**
+  exists anywhere under A (recursively searching all subdirectories).
 - By default, matching is **case-sensitive** on filenames. You can use
   --case-insensitive to compare names case-insensitively.
 - You can restrict which files to consider with --ext (repeatable). Default:
@@ -60,51 +50,38 @@ DEFAULT_EXTS = [".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"]
 
 def index_A_images(A: Path, case_insensitive: bool, valid_exts: Set[str]) -> Tuple[Set[str], Dict[str, List[Path]]]:
     """
-    Walk A and collect all image filenames and a map to their full paths.
+    Recursively walk A and collect all image filenames and a map to their full paths.
       - names_A: set of normalized filenames (case as per flag)
       - paths_map: {normalized filename -> [full paths in A]}
-    Only files under images/ with extension in valid_exts are included.
+    All files with extension in valid_exts are included, regardless of directory depth.
     """
     names_A: Set[str] = set()
     paths_map: Dict[str, List[Path]] = {}
 
-    for sub in A.iterdir():
-        if not sub.is_dir():
+    # Use rglob to recursively find all files
+    for p in A.rglob("*"):
+        if not p.is_file():
             continue
-        for category in sub.iterdir():
-            if not category.is_dir():
-                continue
-            images_dir = category / "images"
-            if not images_dir.is_dir():
-                continue
-            for p in images_dir.iterdir():
-                if not p.is_file():
-                    continue
-                if p.suffix.lower() not in valid_exts:
-                    continue
-                key = p.name.lower() if case_insensitive else p.name
-                names_A.add(key)
-                paths_map.setdefault(key, []).append(p)
+        if p.suffix.lower() not in valid_exts:
+            continue
+        key = p.name.lower() if case_insensitive else p.name
+        names_A.add(key)
+        paths_map.setdefault(key, []).append(p)
+    
     return names_A, paths_map
 
 def iter_B_images(B: Path, valid_exts: Set[str]) -> List[Path]:
+    """
+    Recursively walk B and collect all image files.
+    All files with extension in valid_exts are included, regardless of directory depth.
+    """
     imgs: List[Path] = []
-    for category in B.iterdir():
-        if not category.is_dir():
-            continue
-
-        # 1. Images directly in the category
-        for p in category.iterdir():
-            if p.is_file() and p.suffix.lower() in valid_exts:
-                imgs.append(p)
-
-        # 2. Images in the category/images subdir
-        images_dir = category / "images"
-        if images_dir.is_dir():
-            for p in images_dir.iterdir():
-                if p.is_file() and p.suffix.lower() in valid_exts:
-                    imgs.append(p)
-
+    
+    # Use rglob to recursively find all files
+    for p in B.rglob("*"):
+        if p.is_file() and p.suffix.lower() in valid_exts:
+            imgs.append(p)
+    
     return imgs
 
 

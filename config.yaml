@@ -19,57 +19,62 @@ scripts:
   source: local
 - name: 1_organize_into_images_annots.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/the_training_bible/organize_data
+  execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
   hash_id: d4b78dea6513b2bc63e7f839eb966b5e4299150ff6113a3924b9288b5a76dd08
   source: local
 - name: 2_rename_files.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/the_training_bible/organize_data
+  execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
   hash_id: 3b15b18ad69c5e3ba15d4a5968f79f293f21baa59356dd400039d8e9778c3076
   source: local
 - name: 3_validate_data_structure.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/the_training_bible/organize_data
+  execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
   hash_id: 5d5c01dd6275db9fee49d7f5b00f8fc4f85aa5fe002b96a0e4bcf9f9a338e431
   source: local
 - name: build_inference_records.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: c5fa6f9264b1844b9add68d5e0c631a78d8c703b2249961f5186ead3eae33814
   source: local
 - name: capture_sorting_duplicates.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/the_training_bible
-  hash_id: adf0f8343b6aeeb431edd0e0aaaed87eb1146aafaeaab215153ff7bcc0c14d9e
+  execution_path: /home/simon/aris-cli/scripts/the_training_bible
+  hash_id: 7b2b3dab568c9bb5fb88b2a62767e05fba3afbddbaa8cffc07b254d661370250
   source: local
 - name: check_and_move_images.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
-  hash_id: adfb868aa541cc2f28efb918b3fade1c21d2627a76b7399a908b7e86103cae02
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
+  hash_id: 1ed3a96b9b10144e42347ecd538996e01a116eb7a157aa0da7157f0e0e8d4394
   source: local
 - name: collection_annots_overview.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 4a073b10619d01c8c0b783e1476b225a143631a591e06e9c9e9fe2ddd84582cd
+  source: local
+- name: collection_sorter.py
+  python3: /home/simon/.pyenv/versions/3.12.3/bin/python3
+  execution_path: /home/simon/aris-cli/scripts
+  hash_id: 727d3a0eca6455a51ffa14e962a6aecc909107f938dd0d08bbba1b28ebaecc34
   source: local
 - name: compare_images_between_two_dirs.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 339e6b6b76dee20ec74e22bff02016c3bf0eac6dc9079f281ff36feaf5b86162
   source: local
 - name: find_duplicate_imgs_in_collection.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 2edaeecb94460a0120070168bac0cee1c394093b1b6d144580e993a95bcd2e66
   source: local
 - name: fix_category_annotations.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 022d58ac8295089a814c2f9c0fee8d506f3e3f63fea4e3060d9b7b4112f9b712
   source: local
 - name: move_n_random_images_to_val.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 5b770aad1ee436fa9a8322d68514e5c4cb64b2cf2edf9162cab7f60740259c9b
   source: local
 - name: review_annotations.py
@@ -89,12 +94,12 @@ scripts:
   source: Annotation
 - name: sync_and_sort_images.sh
   python3: NAN
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 848431e42b5620cd394e803b60ae3ee372d01a9c7db042256ff84d0deb8b55cb
   source: local
 - name: sync_image_files.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts
+  execution_path: /home/simon/aris-cli/scripts
   hash_id: eae8cadd39a4506e7e685f326b826d85c1bd562c8ee76d2f04ada39dcfae175b
   source: local
 - name: synthesize.py
@@ -104,6 +109,6 @@ scripts:
   source: Synthetics
 - name: update_bulk_download.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris_scripts/scripts/christians_helper_scripts
+  execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 228c063c38145981be1fe2a352bd792a51c62ad8ff22cdd77afca5323a793f71
   source: local
