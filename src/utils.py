@@ -20,6 +20,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from ruamel.yaml import YAML
 
 
 CONFIG_BASENAME = "config.yaml"
@@ -91,9 +92,16 @@ def load_config(root: Path) -> Dict[str, Any]:
     if not p.exists():
         return {"repositories": [], "scripts": []}
     try:
+        # Use ruamel.yaml to preserve formatting
+        yaml_parser = YAML()
+        yaml_parser.preserve_quotes = True
+        yaml_parser.default_flow_style = False
         with p.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-    except yaml.YAMLError as e:
+            data = yaml_parser.load(f) or {}
+        # Convert CommentedMap/CommentedSeq to regular dict/list for easier processing
+        import json
+        return json.loads(json.dumps(data, default=str))
+    except Exception as e:
         # Print a concise, user-friendly error message with color highlighting
         import sys
         import traceback
@@ -165,11 +173,11 @@ def load_config(root: Path) -> Dict[str, Any]:
 
 
 def save_config(root: Path, data: Dict[str, Any]) -> None:
-    """Persist config.yaml.
+    """Persist config.yaml while preserving formatting, comments, and blank lines.
 
     Args:
         root: Repository root.
-        data: YAML structure.
+        data: YAML structure with updated values.
 
     Returns:
         None
@@ -177,34 +185,121 @@ def save_config(root: Path, data: Dict[str, Any]) -> None:
 
     p = config_path(root)
     
-    # We want to use flow style (inline brackets) only for 'tags' lists,
-    # not for the main structure. We'll manually mark tags lists.
-    # Wrap tags in a custom class to signal flow style.
-    class FlowList(list):
-        pass
+    # Use ruamel.yaml for round-trip preservation of formatting
+    yaml_writer = YAML()
+    yaml_writer.preserve_quotes = True
+    yaml_writer.default_flow_style = False
+    yaml_writer.width = 4096  # Prevent line wrapping
+    yaml_writer.indent(mapping=2, sequence=2, offset=0)
+    yaml_writer.map_indent = 2
+    yaml_writer.sequence_indent = 2
     
-    # Convert all 'tags' values to FlowList
+    # Save header comments before top-level 'scripts' key
+    scripts_header_lines = []
+    if p.exists():
+        # Read the raw file and extract comment blocks before top-level 'scripts:'
+        with p.open("r", encoding="utf-8") as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                # Look for top-level 'scripts:' (no leading whitespace)
+                if line.strip() == 'scripts:' and not line.startswith(' '):
+                    # Look backward for comment block
+                    j = i - 1
+                    while j >= 0 and (lines[j].strip().startswith('#') or lines[j].strip() == ''):
+                        scripts_header_lines.insert(0, lines[j])
+                        j -= 1
+                    break
+    
+    # If file exists, load with ruamel to preserve comments/formatting
+    if p.exists():
+        with p.open("r", encoding="utf-8") as f:
+            existing = yaml_writer.load(f)
+        
+        # Update existing structure with new data
+        if existing is None:
+            from ruamel.yaml.comments import CommentedMap
+            existing = CommentedMap()
+        
+        # Update repositories section while preserving any attached comments
+        if "repositories" in data:
+            from ruamel.yaml.comments import CommentedSeq
+            if not isinstance(data["repositories"], CommentedSeq):
+                new_repos = CommentedSeq(data["repositories"])
+            else:
+                new_repos = data["repositories"]
+            
+            # Add blank line before each repository entry (except first)
+            for i in range(1, len(new_repos)):
+                new_repos.yaml_set_comment_before_after_key(i, before='\n')
+            
+            existing["repositories"] = new_repos
+        
+        # Update scripts section while preserving any attached comments
+        if "scripts" in data:
+            from ruamel.yaml.comments import CommentedSeq
+            if not isinstance(data["scripts"], CommentedSeq):
+                new_scripts = CommentedSeq(data["scripts"])
+            else:
+                new_scripts = data["scripts"]
+            
+            # Add blank line before each script entry (except first)
+            for i in range(1, len(new_scripts)):
+                new_scripts.yaml_set_comment_before_after_key(i, before='\n')
+            
+            existing["scripts"] = new_scripts
+        
+        # Use existing as the base to preserve comments and formatting
+        data = existing
+    else:
+        # New file - create CommentedSeq for repositories and scripts
+        from ruamel.yaml.comments import CommentedSeq, CommentedMap
+        
+        root_map = CommentedMap()
+        
+        if "repositories" in data:
+            repos = CommentedSeq(data["repositories"])
+            for i in range(1, len(repos)):
+                repos.yaml_set_comment_before_after_key(i, before='\n')
+            root_map["repositories"] = repos
+        
+        if "scripts" in data:
+            scripts = CommentedSeq(data["scripts"])
+            for i in range(1, len(scripts)):
+                scripts.yaml_set_comment_before_after_key(i, before='\n')
+            root_map["scripts"] = scripts
+        
+        data = root_map
+    
+    # Ensure tags are in flow style (inline format)
     if "scripts" in data:
+        from ruamel.yaml.comments import CommentedSeq
         for script in data["scripts"]:
-            if "tags" in script and isinstance(script["tags"], list):
-                script["tags"] = FlowList(script["tags"])
+            if "tags" in script and isinstance(script["tags"], (list, CommentedSeq)):
+                # Create a new CommentedSeq with flow style
+                tags_flow = CommentedSeq(script["tags"])
+                tags_flow.fa.set_flow_style()
+                script["tags"] = tags_flow
     
-    # Custom YAML dumper
-    class FlowStyleDumper(yaml.SafeDumper):
-        pass
-    
-    def represent_flow_list(dumper, data):
-        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
-    
-    def represent_normal_list(dumper, data):
-        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=False)
-    
-    # Use flow style only for FlowList, normal block style for regular lists
-    FlowStyleDumper.add_representer(FlowList, represent_flow_list)
-    FlowStyleDumper.add_representer(list, represent_normal_list)
-    
+    # Write back to file
     with p.open("w", encoding="utf-8") as f:
-        yaml.dump(data, f, Dumper=FlowStyleDumper, sort_keys=False, default_flow_style=False)
+        yaml_writer.dump(data, f)
+    
+    # Post-process: Restore scripts header comment if it existed
+    if scripts_header_lines:
+        with p.open("r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Find top-level 'scripts:' line and insert header before it
+        lines = content.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            # Look for top-level 'scripts:' (no leading whitespace)
+            if line.strip() == 'scripts:' and not line.startswith(' '):
+                # Insert the header comments before this line
+                lines[i:i] = scripts_header_lines
+                break
+        
+        with p.open("w", encoding="utf-8") as f:
+            f.writelines(lines)
 
 
 # ----------------------------- DISCOVERY -----------------------------------

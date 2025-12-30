@@ -28,19 +28,20 @@ from utils import (
 )
 
 
-def score_match(name: str, desc: str, tags: list[str], token: str) -> tuple[int, int, int]:
+def score_match(name: str, desc: str, tags: list[str], source: str, token: str) -> tuple[int, int, int]:
     """Compute a match score tuple for sorting.
 
     The tuple is ordered such that lower values are better.
     Priority:
-      1) Tag contains token (0) vs name contains token (1) vs desc contains token (2)
-      2) Earlier occurrence index in name/desc/tags
+      1) Tag/source contains token (0) vs name contains token (1) vs desc contains token (2)
+      2) Earlier occurrence index in name/desc/tags/source
       3) Shorter name
 
     Args:
         name: Script name.
         desc: Description.
         tags: List of tags.
+        source: Source repository (treated as special tag if not "local").
         token: Query token.
 
     Returns:
@@ -51,21 +52,26 @@ def score_match(name: str, desc: str, tags: list[str], token: str) -> tuple[int,
     name_l = name.lower()
     desc_l = desc.lower()
     tags_l = [t.lower() for t in tags]
+    source_l = source.lower() if source != "local" else ""
 
-    # Check if token matches any tag
+    # Check if token matches any tag or source
     in_tags = any(token_l in tag for tag in tags_l)
+    in_source = source_l and token_l in source_l
     in_name = token_l in name_l
     in_desc = token_l in desc_l
 
-    # Priority: tags > name > desc
-    if in_tags:
+    # Priority: tags/source > name > desc
+    if in_tags or in_source:
         primary = 0
-        # Find first tag match position
+        # Find first tag/source match position
         idx = 0
-        for i, tag in enumerate(tags_l):
-            if token_l in tag:
-                idx = i
-                break
+        if in_tags:
+            for i, tag in enumerate(tags_l):
+                if token_l in tag:
+                    idx = i
+                    break
+        else:
+            idx = 0  # source match
     elif in_name:
         primary = 1
         idx = name_l.index(token_l)
@@ -96,9 +102,10 @@ def search_curses(stdscr, entries):
     
     # Color setup
     if curses.has_colors():
-        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
-        curses.init_pair(3, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)     # Name matches
+        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)   # (unused)
+        curses.init_pair(3, curses.COLOR_CYAN, curses.COLOR_BLACK)    # Tag matches
+        curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Source matches
     
     search_query = ""
     selected_script = None
@@ -121,9 +128,12 @@ def search_curses(stdscr, entries):
             matches = []
             for e in entries:
                 tags = getattr(e, "tags", []) or []
+                source = getattr(e, "source", "local")
+                # Match in name, description, tags, or source (if not local)
                 if search_query.lower() in e.name.lower() or \
                    search_query.lower() in (e.description or "").lower() or \
-                   any(search_query.lower() in tag.lower() for tag in tags):
+                   any(search_query.lower() in tag.lower() for tag in tags) or \
+                   (source != "local" and search_query.lower() in source.lower()):
                     matches.append(e)
             
             # Prioritize scripts that have a configured shortcut. Within each
@@ -131,7 +141,8 @@ def search_curses(stdscr, entries):
             matches.sort(
                 key=lambda e: (
                     0 if getattr(e, "shortcut", "") else 1,
-                    *score_match(e.name, e.description or "", getattr(e, "tags", []) or [], search_query),
+                    *score_match(e.name, e.description or "", getattr(e, "tags", []) or [], 
+                                getattr(e, "source", "local"), search_query),
                 )
             )
             
@@ -168,13 +179,26 @@ def search_curses(stdscr, entries):
                     
                     line += 1
                     
-                    # Show matching tags in bold blue if present
+                    # Show matching tags in bold cyan if present
                     tags = getattr(e, "tags", []) or []
+                    source = getattr(e, "source", "local")
                     matching_tags = [tag for tag in tags if search_query.lower() in tag.lower()]
-                    if line < height - 1 and matching_tags:
-                        tags_line = f"     tags: {', '.join(matching_tags)}"
+                    source_matches = source != "local" and search_query.lower() in source.lower()
+                    
+                    # Display tags and/or source if they match
+                    if line < height - 1 and (matching_tags or source_matches):
                         stdscr.addstr(line, 0, "     tags: ", curses.A_DIM)
-                        # Highlight each matching tag in bold blue
+                        
+                        # Show source first in yellow if it matches
+                        if source_matches:
+                            if curses.has_colors():
+                                stdscr.addstr(source, curses.color_pair(4) | curses.A_BOLD)
+                            else:
+                                stdscr.addstr(source, curses.A_BOLD)
+                            if matching_tags:
+                                stdscr.addstr(", ", curses.A_DIM)
+                        
+                        # Show matching tags in cyan
                         for idx_tag, tag in enumerate(matching_tags):
                             if idx_tag > 0:
                                 stdscr.addstr(", ", curses.A_DIM)
@@ -182,6 +206,14 @@ def search_curses(stdscr, entries):
                                 stdscr.addstr(tag, curses.color_pair(3) | curses.A_BOLD)
                             else:
                                 stdscr.addstr(tag, curses.A_BOLD)
+                        line += 1
+                    # If source doesn't match but we still want to show it, display it even without search match
+                    elif line < height - 1 and source != "local":
+                        stdscr.addstr(line, 0, "     tags: ", curses.A_DIM)
+                        if curses.has_colors():
+                            stdscr.addstr(source, curses.color_pair(4) | curses.A_DIM)
+                        else:
+                            stdscr.addstr(source, curses.A_DIM)
                         line += 1
                     
                     # Show description snippet if match is in description

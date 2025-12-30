@@ -14,7 +14,6 @@ repositories:
   python3: /home/simon/Documents/Synthetics/.venv/bin/python3
   scripts:
   - run.sh
-  - synthesize.py
 
 - name: Classification
   path: /home/simon/Desktop/classification
@@ -34,7 +33,7 @@ scripts:
   hash_id: 392807cfb50f39822e08a6c9efb39986cd83f5c0de13ef3148ba42e091575acf
   source: local
   shortcut: summarise
-  tags: [training_bible, organize_data, move]
+  tags: [training_bible, organize_data, read]
 
 - name: 1_organize_into_images_annots.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -42,7 +41,7 @@ scripts:
   hash_id: d4b78dea6513b2bc63e7f839eb966b5e4299150ff6113a3924b9288b5a76dd08
   source: local
   shortcut: organize_folder
-  tags: []
+  tags: [training_bible, organize_data, move]
 
 - name: 2_rename_files.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -50,7 +49,7 @@ scripts:
   hash_id: 3b15b18ad69c5e3ba15d4a5968f79f293f21baa59356dd400039d8e9778c3076
   source: local
   shortcut: rename_files
-  tags: []
+  tags: [training_bible, organize_data, move, modify]
 
 - name: 3_validate_data_structure.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -58,7 +57,7 @@ scripts:
   hash_id: 5d5c01dd6275db9fee49d7f5b00f8fc4f85aa5fe002b96a0e4bcf9f9a338e431
   source: local
   shortcut: validate_folder
-  tags: []
+  tags: [training_bible, organize_data, read, validate]
 
 - name: build_inference_records.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -66,7 +65,7 @@ scripts:
   hash_id: c5fa6f9264b1844b9add68d5e0c631a78d8c703b2249961f5186ead3eae33814
   source: local
   shortcut: ''
-  tags: []
+  tags: [download, start new capture]
 
 - name: capture_sorting_duplicates.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -74,7 +73,7 @@ scripts:
   hash_id: c6c76ad0ead29373ed13c769ca124d34a2d5f7d2b13f5a0e84d2c2a0fd647147
   source: local
   shortcut: ''
-  tags: []
+  tags: [sorting, duplicates]
 
 - name: check_and_move_images.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -82,7 +81,7 @@ scripts:
   hash_id: 1ed3a96b9b10144e42347ecd538996e01a116eb7a157aa0da7157f0e0e8d4394
   source: local
   shortcut: check_and_move_images
-  tags: []
+  tags: [move, duplicates, compare]
 
 - name: collection_annots_overview.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -98,7 +97,7 @@ scripts:
   hash_id: a450a5bfd1ab14a0716cd3e9181bbacea975d13a48ab3ad4b81360a18d2f712b
   source: local
   shortcut: sort
-  tags: []
+  tags: [gui, sorting, organize]
 
 - name: collection_sorter_capture_sorting_duplicates.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
@@ -107,83 +106,95 @@ scripts:
   source: local
   shortcut: ''
   tags: []
+
 - name: compare_images_between_two_dirs.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: d15dd4f8435381a54da350fa86861c921ecc9750b805a81ec1e78d52b872d66f
   source: local
   shortcut: ''
-  tags: []
+  tags: [compare, duplicates]
+
 - name: create_config_from_data_yaml.py
   python3: venv_classification/bin/python3
   execution_path: /home/simon/Desktop/classification
   hash_id: b0c1eabdfb1410e2acc19ce9b3734099e1efd901afb1f8f1136a7b96e56ecd2b
   source: Classification
   shortcut: ''
-  tags: []
+  tags: [config, data, yaml]
+
 - name: find_duplicate_imgs_in_collection.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 2edaeecb94460a0120070168bac0cee1c394093b1b6d144580e993a95bcd2e66
   source: local
   shortcut: ''
-  tags: []
+  tags: [read]
+
 - name: fix_category_annotations.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 022d58ac8295089a814c2f9c0fee8d506f3e3f63fea4e3060d9b7b4112f9b712
   source: local
   shortcut: ''
-  tags: []
+  tags: [modify]
+
 - name: generate_data_yaml_with_log.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/classification
   hash_id: bed60766063a8d8a0662c0fdd2c37f392da4736dd306f63441f733626f913a8d
   source: local
   shortcut: ''
-  tags: []
+  tags: [yaml]
+
 - name: move_n_random_images_to_val.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 5b770aad1ee436fa9a8322d68514e5c4cb64b2cf2edf9162cab7f60740259c9b
   source: local
   shortcut: ''
-  tags: []
+  tags: [move]
+
 - name: review_annotations.py
   python3: /home/simon/Annotation/.venv/bin/python3
   execution_path: /home/simon/Annotation
   hash_id: 15aa3d08579385c64c711341f96325d7ab24495b64ba29e0c83ff77b7ade45f2
   source: Annotation
   shortcut: review
-  tags: []
+  tags: [review, gui, fiftyone]
+
 - name: run.sh
   python3: NAN
   execution_path: /home/simon/Documents/Synthetics
   hash_id: 7a68385e3b8b05adee8b4ca47f24d043962c22c47cb810c282770b0b795848f6
   source: Synthetics
   shortcut: ''
-  tags: []
+  tags: [bash]
+
 - name: segment.py
   python3: /home/simon/Annotation/.venv/bin/python3
   execution_path: /home/simon/Annotation
   hash_id: 0e535cb721ded23428f8d742a792eee8a1ac31dce6f1d3fb2c6c44c3024f8fb6
   source: Annotation
   shortcut: ''
-  tags: []
+  tags: [gui, segmentation]
+
 - name: sweep.py
   python3: venv_classification/bin/python3
   execution_path: /home/simon/Desktop/classification
   hash_id: c13c864aff74bd15f37c73c959d22459e80f6dfb10548125c08a37396060435a
   source: Classification
   shortcut: ''
-  tags: []
+  tags: [training]
+
 - name: sync_and_sort_images.sh
   python3: NAN
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
   hash_id: 848431e42b5620cd394e803b60ae3ee372d01a9c7db042256ff84d0deb8b55cb
   source: local
   shortcut: sync
-  tags: []
+  tags: [bash, sorting, organize, download]
+
 - name: sync_image_files.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
@@ -191,20 +202,15 @@ scripts:
   source: local
   shortcut: ''
   tags: []
-- name: synthesize.py
-  python3: /home/simon/Documents/Synthetics/.venv/bin/python3
-  execution_path: /home/simon/Documents/Synthetics
-  hash_id: 02bcebd44cd3ec669c63701a46b5b64e2e4b45810cd7fdb9a3dbc871883e460f
-  source: Synthetics
-  shortcut: ''
-  tags: []
+
 - name: train.py
   python3: venv_classification/bin/python3
   execution_path: /home/simon/Desktop/classification
   hash_id: 7a3fa39ddfdaa3e8fcf22fd2719dea095d23d8c698fa1db83797510b99ae978a
   source: Classification
   shortcut: ''
-  tags: []
+  tags: [training]
+
 - name: update_bulk_download.py
   python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
   execution_path: /home/simon/aris-cli/scripts/christians_helper_scripts
