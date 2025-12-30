@@ -48,10 +48,16 @@ case "$SUBCMD" in
     "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" --list
     exit 0
     ;;
+  --reset-config)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose --reset-config "$@"
+    echo "Resetting configuration completed."
+    exit 0
+    ;;
   --refresh)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
-    echo
+    echo "Refresh completed."
     exit 0
     ;;
   --help|-h|help)

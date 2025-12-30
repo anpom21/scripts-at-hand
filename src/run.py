@@ -45,13 +45,16 @@ def list_scripts(root: Path) -> int:
         # Script name in green
         name_colored = f"{GREEN}{e.name}{RESET}"
         
+        # Shortcut in dim grey if present
+        shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+        
         # Source in red brackets if not local
         src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
         
         # Description in dim grey
         desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
         
-        print(f"  {name_colored}{src_colored}{desc_colored}")
+        print(f"  {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
 
     return 0
 
@@ -143,6 +146,7 @@ Options:
   search              Interactive search for scripts
   --list              List all available scripts
   --refresh           Refresh script index and show changes
+  --reset-config      Reset per-script config (python3, execution_path, name, hash_id, source) but keep shortcuts
   --help, -h          Show this help message"""
 
     ap = argparse.ArgumentParser(

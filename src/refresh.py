@@ -57,9 +57,43 @@ def refresh(root: Path, verbose: bool = False) -> int:
     
     # Load current config
     cfg = load_config(root)
-    
-    # Build new entries WITH overrides to preserve user edits
-    entries = build_script_index(root, cfg)
+
+    # If reset_config is requested we will reset per-script overrides except
+    # for the `shortcut` field. To support this, build a minimal config that
+    # preserves repository entries and only the shortcut values from the
+    # existing scripts. This minimal config is then passed to
+    # build_script_index so discovered scripts replace python3, execution_path,
+    # name, hash_id and source, while shortcuts are retained.
+    reset_requested = False
+    # The caller may set an attribute on the function (handled below) but we
+    # read this variable from the outer scope; it will be overridden in main().
+
+    # Build entries (by default include overrides). If reset_requested is set
+    # externally, we'll construct a minimal cfg for indexing further below.
+    entries = None
+
+    # If reset_config was requested, construct a minimal cfg preserving only
+    # the script shortcuts and repository list, then build the index from it.
+    if getattr(refresh, "reset_config", False):
+        reset_requested = True
+
+    if reset_requested:
+        # Preserve repository definitions as-is
+        minimal_cfg = {"repositories": cfg.get("repositories", []), "scripts": []}
+        for s in cfg.get("scripts", []) or []:
+            # Keep only name, shortcut, and tags so build_script_index will
+            # apply the discovered values for other fields
+            preserved = {"name": s.get("name")}
+            if s.get("shortcut"):
+                preserved["shortcut"] = s.get("shortcut")
+            if s.get("tags"):
+                preserved["tags"] = s.get("tags")
+            minimal_cfg["scripts"].append(preserved)
+
+        entries = build_script_index(root, minimal_cfg)
+    else:
+        # Build new entries WITH overrides to preserve user edits
+        entries = build_script_index(root, cfg)
 
     # Set executable for all shell scripts (local only)
     for p in list_local_scripts(root):
@@ -132,11 +166,8 @@ def refresh(root: Path, verbose: bool = False) -> int:
                     src_label = f" [{src}]" if src != "local" else ""
                     print(f"{YELLOW}~ {name}{src_label}{RESET}", file=sys.stderr)
                     for key, old_val, new_val in changes:
-                        # Truncate long values (like hash_id)
-                        if len(str(old_val)) > 40:
-                            old_val = str(old_val)[:40] + "..."
-                        if len(str(new_val)) > 40:
-                            new_val = str(new_val)[:40] + "..."
+                        # Show full old/new values (no truncation) so users can
+                        # see the complete change.
                         print(f"{DIM}    {key}: {old_val} → {new_val}{RESET}", file=sys.stderr)
                 
                 print(file=sys.stderr)
@@ -157,7 +188,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Refresh scripts index and config.yaml")
     ap.add_argument("--root", required=True, help="Path to aris-cli repo root")
     ap.add_argument("--verbose", "-v", action="store_true", help="Show changes")
+    ap.add_argument("--reset-config", action="store_true", help="Reset per-script config (python3, execution_path, name, hash_id, source) but keep shortcuts")
     args = ap.parse_args()
+
+    # Communicate the reset flag into the refresh() function via attribute so
+    # the inner logic can detect it without changing many call sites.
+    setattr(refresh, "reset_config", args.reset_config)
 
     raise SystemExit(refresh(Path(args.root), verbose=args.verbose))
 

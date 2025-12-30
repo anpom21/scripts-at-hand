@@ -28,18 +28,19 @@ from utils import (
 )
 
 
-def score_match(name: str, desc: str, token: str) -> tuple[int, int, int]:
+def score_match(name: str, desc: str, tags: list[str], token: str) -> tuple[int, int, int]:
     """Compute a match score tuple for sorting.
 
     The tuple is ordered such that lower values are better.
     Priority:
-      1) Name contains token (0) vs not (1)
-      2) Earlier occurrence index in name/desc
+      1) Tag contains token (0) vs name contains token (1) vs desc contains token (2)
+      2) Earlier occurrence index in name/desc/tags
       3) Shorter name
 
     Args:
         name: Script name.
         desc: Description.
+        tags: List of tags.
         token: Query token.
 
     Returns:
@@ -49,16 +50,30 @@ def score_match(name: str, desc: str, token: str) -> tuple[int, int, int]:
     token_l = token.lower()
     name_l = name.lower()
     desc_l = desc.lower()
+    tags_l = [t.lower() for t in tags]
 
+    # Check if token matches any tag
+    in_tags = any(token_l in tag for tag in tags_l)
     in_name = token_l in name_l
     in_desc = token_l in desc_l
 
-    primary = 0 if in_name else 1
-    if in_name:
+    # Priority: tags > name > desc
+    if in_tags:
+        primary = 0
+        # Find first tag match position
+        idx = 0
+        for i, tag in enumerate(tags_l):
+            if token_l in tag:
+                idx = i
+                break
+    elif in_name:
+        primary = 1
         idx = name_l.index(token_l)
     elif in_desc:
+        primary = 2
         idx = desc_l.index(token_l)
     else:
+        primary = 3
         idx = 10**9
 
     return (primary, idx, len(name))
@@ -105,11 +120,20 @@ def search_curses(stdscr, entries):
         if search_query:
             matches = []
             for e in entries:
+                tags = getattr(e, "tags", []) or []
                 if search_query.lower() in e.name.lower() or \
-                   search_query.lower() in (e.description or "").lower():
+                   search_query.lower() in (e.description or "").lower() or \
+                   any(search_query.lower() in tag.lower() for tag in tags):
                     matches.append(e)
             
-            matches.sort(key=lambda e: score_match(e.name, e.description or "", search_query))
+            # Prioritize scripts that have a configured shortcut. Within each
+            # group (has shortcut vs not), use the existing score_match ordering.
+            matches.sort(
+                key=lambda e: (
+                    0 if getattr(e, "shortcut", "") else 1,
+                    *score_match(e.name, e.description or "", getattr(e, "tags", []) or [], search_query),
+                )
+            )
             
             if matches:
                 stdscr.addstr(4, 0, f"Found {len(matches)} result(s):", curses.A_DIM)
@@ -143,6 +167,22 @@ def search_curses(stdscr, entries):
                         stdscr.addstr(line, 0, result_line[:width-1])
                     
                     line += 1
+                    
+                    # Show matching tags in bold blue if present
+                    tags = getattr(e, "tags", []) or []
+                    matching_tags = [tag for tag in tags if search_query.lower() in tag.lower()]
+                    if line < height - 1 and matching_tags:
+                        tags_line = f"     tags: {', '.join(matching_tags)}"
+                        stdscr.addstr(line, 0, "     tags: ", curses.A_DIM)
+                        # Highlight each matching tag in bold blue
+                        for idx_tag, tag in enumerate(matching_tags):
+                            if idx_tag > 0:
+                                stdscr.addstr(", ", curses.A_DIM)
+                            if curses.has_colors():
+                                stdscr.addstr(tag, curses.color_pair(3) | curses.A_BOLD)
+                            else:
+                                stdscr.addstr(tag, curses.A_BOLD)
+                        line += 1
                     
                     # Show description snippet if match is in description
                     if line < height - 1 and search_query.lower() in (e.description or "").lower():

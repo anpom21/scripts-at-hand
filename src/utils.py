@@ -50,6 +50,16 @@ class ScriptEntry:
     description: str = ""
     execution_path: str = ""
     hash_id: str = ""
+    # Optional shortcut name (e.g. 'summarise') that can be used in place of the
+    # full script name. Empty string means no shortcut.
+    shortcut: str = ""
+    # Optional list of tags for categorization and search (e.g., ['training', 'data']).
+    tags: List[str] = None
+    
+    def __post_init__(self):
+        """Initialize tags to empty list if None."""
+        if self.tags is None:
+            self.tags = []
 
 
 # ----------------------------- YAML CONFIG ---------------------------------
@@ -80,8 +90,75 @@ def load_config(root: Path) -> Dict[str, Any]:
     p = config_path(root)
     if not p.exists():
         return {"repositories": [], "scripts": []}
-    with p.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        # Print a concise, user-friendly error message with color highlighting
+        import sys
+        import traceback
+
+        RED = "\033[0;31m"
+        YELLOW = "\033[0;33m"
+        CYAN = "\033[1;36m"
+        DIM = "\033[2m"
+        RESET = "\033[0m"
+
+        # Header
+        print(f"{RED}[ERROR] Config syntax is incorrect{RESET}", file=sys.stderr)
+
+        # Try to extract a helpful message and mark (line/column)
+        problem = getattr(e, "problem", None)
+        problem_mark = getattr(e, "problem_mark", None)
+        message = None
+        if problem:
+            message = str(problem)
+        else:
+            # Some YAML errors include the message in str(e)
+            message = str(e)
+
+        if message:
+            print(f"{YELLOW}  {message}{RESET}", file=sys.stderr)
+
+        if problem_mark:
+            # problem_mark has attributes: name, line, column
+            try:
+                line_no = problem_mark.line + 1
+                col_no = problem_mark.column + 1
+                print(f"{CYAN}    in \"{p}\", line {line_no}, column {col_no}{RESET}", file=sys.stderr)
+
+                # Print surrounding lines for context (3 lines before/after)
+                try:
+                    full = p.read_text()
+                    lines = full.splitlines()
+                    start = max(0, line_no - 4)
+                    end = min(len(lines), line_no + 3)
+                    for i in range(start, end):
+                        is_error = (i == line_no - 1)
+                        prefix = f"{RED}-> {RESET}" if is_error else "   "
+                        line_text = lines[i]
+                        if is_error:
+                            # Highlight error line
+                            print(f"{prefix}{i+1:4d}: {RED}{line_text}{RESET}", file=sys.stderr)
+                        else:
+                            print(f"{prefix}{i+1:4d}: {DIM}{line_text}{RESET}", file=sys.stderr)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # Optionally print a full traceback for debugging when ARIS_DEBUG is set.
+        debug_env = os.getenv("ARIS_DEBUG", "").lower()
+        if debug_env in ("1", "true", "yes"):
+            tb = traceback.format_exc()
+            if tb:
+                print(f"{DIM}{tb}{RESET}", file=sys.stderr)
+        # else:
+        #     # Short hint for advanced users
+        #     print(f"{DIM}Tip: set ARIS_DEBUG=1 to see full traceback{RESET}", file=sys.stderr)
+
+        # Exit since config is invalid
+        sys.exit(2)
     data.setdefault("repositories", [])
     data.setdefault("scripts", [])
     return data
@@ -99,8 +176,35 @@ def save_config(root: Path, data: Dict[str, Any]) -> None:
     """
 
     p = config_path(root)
+    
+    # We want to use flow style (inline brackets) only for 'tags' lists,
+    # not for the main structure. We'll manually mark tags lists.
+    # Wrap tags in a custom class to signal flow style.
+    class FlowList(list):
+        pass
+    
+    # Convert all 'tags' values to FlowList
+    if "scripts" in data:
+        for script in data["scripts"]:
+            if "tags" in script and isinstance(script["tags"], list):
+                script["tags"] = FlowList(script["tags"])
+    
+    # Custom YAML dumper
+    class FlowStyleDumper(yaml.SafeDumper):
+        pass
+    
+    def represent_flow_list(dumper, data):
+        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
+    
+    def represent_normal_list(dumper, data):
+        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=False)
+    
+    # Use flow style only for FlowList, normal block style for regular lists
+    FlowStyleDumper.add_representer(FlowList, represent_flow_list)
+    FlowStyleDumper.add_representer(list, represent_normal_list)
+    
     with p.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=False)
+        yaml.dump(data, f, Dumper=FlowStyleDumper, sort_keys=False, default_flow_style=False)
 
 
 # ----------------------------- DISCOVERY -----------------------------------
@@ -506,6 +610,16 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
             # Apply python3 override if present
             if "python3" in override and override["python3"]:
                 entry.python3 = override["python3"]
+            # Apply shortcut override if present
+            if "shortcut" in override and override["shortcut"]:
+                entry.shortcut = override["shortcut"].strip()
+            # Apply tags override if present
+            if "tags" in override:
+                tags = override["tags"]
+                if isinstance(tags, list):
+                    entry.tags = tags
+                else:
+                    entry.tags = []
 
     return sorted(entries, key=lambda x: x.name.lower())
 
@@ -531,6 +645,8 @@ def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> D
             "execution_path": e.execution_path,
             "hash_id": e.hash_id,
             "source": e.source,
+            "shortcut": e.shortcut,
+            "tags": e.tags if e.tags else [],
         })
     cfg["scripts"] = scripts_out
     return cfg
@@ -549,7 +665,12 @@ def find_entry(entries: List[ScriptEntry], script_name: str) -> Optional[ScriptE
 
     script_name = script_name.strip()
     for e in entries:
+        # Exact name match
         if e.name == script_name:
+            return e
+    # If no exact name match, try shortcut match
+    for e in entries:
+        if e.shortcut and e.shortcut == script_name:
             return e
     return None
 

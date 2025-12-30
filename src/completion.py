@@ -30,13 +30,23 @@ def bash_completion(root: Path) -> str:
     # Load all scripts from the index
     cfg = load_config(root)
     entries = build_script_index(root, cfg)
-    script_names = " ".join(e.name for e in entries)
-    
-    # Build a map of script names to their execution paths
-    script_exec_paths = {}
+
+    # Include both script names and configured shortcuts in completions
+    names: list[str] = []
+    for e in entries:
+        names.append(e.name)
+        if getattr(e, "shortcut", None):
+            names.append(e.shortcut)
+    # Ensure unique ordering
+    script_names = " ".join(sorted(set(names), key=str.lower))
+
+    # Build a map of script names (and shortcuts) to their execution paths
+    script_exec_paths: dict[str, str] = {}
     for e in entries:
         if e.execution_path:
             script_exec_paths[e.name] = e.execution_path
+            if getattr(e, "shortcut", None):
+                script_exec_paths[e.shortcut] = e.execution_path
 
     # Format for bash associative array
     exec_paths_bash = ""
