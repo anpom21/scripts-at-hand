@@ -40,6 +40,14 @@ A lightweight, repo-local CLI that consolidates many production scripts (Python 
 
 ## Install / Use
 
+### Easy install:
+
+```bash
+bash ./install.sh
+```
+
+### Manual install:
+
 ### 1) Clone repository
 
 ```bash

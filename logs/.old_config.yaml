@@ -85,6 +85,14 @@ scripts:
   shortcut: ''
   tags: [compare, duplicates]
 
+- name: config_backup.py
+  python3: /home/ap/synced/ARIS/aris-cli/.venv/bin/python3
+  execution_path: /home/ap/synced/ARIS/aris-cli/scripts/christians_helper_scripts
+  hash_id: 6573b9acdcc0b9a854da94c53c45f7faf6b67d55ebbaea69d89eebe138260948
+  source: local
+  shortcut: ''
+  tags: []
+
 - name: find_duplicate_imgs_in_collection.py
   python3: /home/ap/synced/ARIS/aris-cli/.venv/bin/python3
   execution_path: /home/ap/synced/ARIS/aris-cli/scripts/christians_helper_scripts

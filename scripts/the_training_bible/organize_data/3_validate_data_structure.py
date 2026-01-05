@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import json
 import argparse
 from collections import defaultdict
 from pathlib import Path
@@ -33,10 +34,12 @@ class DataValidator:
         self.verbose = verbose
         self.errors = []
         self.warnings = []
+        self.infos = []
         self.stats = defaultdict(int)
         self.filename_registry = {}  # Maps filename -> list of (path, mtime) tuples
         self.all_categories = set()  # Track unique categories across all splits
         self.split_categories = {}  # Maps split name -> set of categories
+        self.category_mismatches = []  # Track annotation files with incorrect category fields
     
     def _format_path(self, path, capture_name=None, obj_name=None):
         """
@@ -52,6 +55,58 @@ class DataValidator:
             return f"{relative}\n      Full path: {path}"
         else:
             return str(path)
+    
+    def _load_json(self, path):
+        """Load and parse a JSON file, return None if it fails."""
+        try:
+            with path.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self.warnings.append(f"Failed to parse JSON file {path}: {e}")
+            return None
+    
+    def _expected_category_for(self, json_path):
+        """Extract expected category from annotation path."""
+        # json_path.parent is annots/ (or category/ in train mode),
+        # its parent is the category folder
+        parent = json_path.parent
+        if parent.name == "annots":
+            return parent.parent.name
+        else:
+            # In train mode, might be directly in category folder
+            return parent.name
+    
+    def _validate_annotation_category(self, annot_path, expected_category):
+        """Validate that annotation's category field matches expected category."""
+        data = self._load_json(annot_path)
+        if data is None:
+            return  # Already warned in _load_json
+        
+        annots = data.get("annotations")
+        if not isinstance(annots, list):
+            return
+        
+        mismatched_count = 0
+        actual_categories = set()
+        
+        for a in annots:
+            if not isinstance(a, dict):
+                continue
+            cat = a.get("category")
+            if cat:
+                actual_categories.add(cat)
+                if cat != expected_category:
+                    mismatched_count += 1
+        
+        if mismatched_count > 0:
+            actual_cats_str = ", ".join(f"'{c}'" for c in sorted(actual_categories) if c != expected_category)
+            self.category_mismatches.append({
+                "path": annot_path,
+                "expected": expected_category,
+                "actual": actual_cats_str,
+                "mismatched_count": mismatched_count,
+                "total_count": len(annots)
+            })
         
     def validate(self):
         """Run validation and return results."""
@@ -120,7 +175,7 @@ class DataValidator:
         all_annots = list(split_path.glob("**/*.json"))
         
         if not all_images and not all_annots:
-            self.warnings.append(f"Split folder '{split_name}' is empty: {split_path}")
+            self.infos.append(f"Split folder '{split_name}' is empty: {split_path}")
             return
         
         # Track categories found in this split
@@ -163,6 +218,9 @@ class DataValidator:
             self.all_categories.add(category_name)  # Track globally
             self.stats['total_annots'] += 1
             self.stats[f'{split_name}_annots'] = self.stats.get(f'{split_name}_annots', 0) + 1
+            
+            # Validate annotation category field
+            self._validate_annotation_category(annot_path, category_name)
         
         # Update category statistics for this split
         self.stats[f'{split_name}_categories'] = len(categories_in_split)
@@ -237,7 +295,7 @@ class DataValidator:
         images = list(images_path.glob("*.png"))
         
         if not images:
-            self.warnings.append(f"Images folder is empty: {self._format_path(images_path, capture_name, obj_name)}")
+            self.infos.append(f"Images folder is empty: {self._format_path(images_path, capture_name, obj_name)}")
             return
         
         self.stats['total_images'] += len(images)
@@ -252,7 +310,7 @@ class DataValidator:
         annots = list(annots_path.glob("*.json"))
         
         if not annots:
-            self.warnings.append(f"Annotations folder is empty: {self._format_path(annots_path, capture_name, obj_name)}")
+            self.infos.append(f"Annotations folder is empty: {self._format_path(annots_path, capture_name, obj_name)}")
             return
         
         self.stats['total_annots'] += len(annots)
@@ -260,6 +318,9 @@ class DataValidator:
         for annot in annots:
             self._register_file(annot)  # Register for duplicate detection
             self._validate_filename(annot, capture_name, 'annot', obj_path, capture_path, obj_name)
+            # Validate annotation category field
+            expected_category = self._expected_category_for(annot)
+            self._validate_annotation_category(annot, expected_category)
     
     def _validate_filename(self, file_path, capture_name, file_type, parent_path, capture_path, obj_name):
         """Validate individual filename against convention."""
@@ -478,8 +539,8 @@ class DataValidator:
         else:
             print(f"\n{GREEN} No errors found!{RESET}")
         
-        # Separate empty folder warnings from other warnings
-        empty_folder_warnings = [w for w in self.warnings if 'folder is empty' in w]
+        # Separate empty folder infos from other warnings
+        empty_folder_infos = [w for w in self.infos if 'folder is empty' in w]
         duplicate_warnings = [w for w in self.warnings if 'DUPLICATE FILENAME FOUND' in w]
         other_warnings = [w for w in self.warnings 
                          if 'folder is empty' not in w and 'DUPLICATE FILENAME FOUND' not in w]
@@ -498,41 +559,53 @@ class DataValidator:
             if len(other_warnings) > 20:
                 print(f"  ... and {len(other_warnings) - 20} more warnings")
         
-        # Print empty folder warnings in a cleaner format if they are the only warnings
-        if empty_folder_warnings and not other_warnings:
-            print(f"\nNOTE:")
-            print(f"The following folders are empty:")
-            for warning in empty_folder_warnings:
-                # Extract the folder path from the warning message
-                folder_path = warning.split(': ')[-1]
-                print(f"  - {folder_path}")
-        elif empty_folder_warnings and other_warnings:
-            # If there are other warnings, include empty folders in regular warnings
-            print(f"\n⚠️  ADDITIONAL WARNINGS - Empty folders ({len(empty_folder_warnings)}):")
-            for warning in empty_folder_warnings[:10]:
-                folder_path = warning.split(': ')[-1]
-                print(f"  - {folder_path}")
-            if len(empty_folder_warnings) > 10:
-                print(f"  ... and {len(empty_folder_warnings) - 10} more empty folders")
         
+        # Print category mismatch warnings
+        if self.category_mismatches:
+            print(f"\n⚠️  INCORRECT ANNOTATION CATEGORIES ({len(self.category_mismatches)}):")            
+            print("   The following annotation files have category fields that don't match their folder structure:")
+            for mismatch in self.category_mismatches[:20]:  # Limit to first 20
+                print(f"\n  File: {mismatch['path']}")
+                print(f"  Folder category: {BOLD}{YELLOW}'{mismatch['expected']}'{RESET}")
+                print(f"  Annotation categories: {BOLD}{YELLOW}{mismatch['actual']}{RESET}")
+                print(f"  Mismatched: {mismatch['mismatched_count']} / {mismatch['total_count']} annotations")
+            if len(self.category_mismatches) > 20:
+                print(f"\n  ... and {len(self.category_mismatches) - 20} more files with category mismatches")
+            print(f"\n  {BOLD}💡 TIP:{RESET} These can be fixed automatically using:")
+            print(f"       {BOLD}fix_category_annotations.py <directory> --run{RESET}")
+        
+        # Print empty folder warnings in a cleaner format if they are the only warnings
+        if empty_folder_infos:
+            # If there are other warnings, include empty folders in regular warnings
+            print(f"\nℹ️  NOTTICE - Empty folders ({len(empty_folder_infos)}):")
+            for warning in empty_folder_infos[:10]:
+                folder_path = warning.split(': ')[-1]
+                print(f"  - {folder_path}")
+            if len(empty_folder_infos) > 10:
+                print(f"  ... and {len(empty_folder_infos) - 10} more empty folders")
         print("\n" + "=" * 70)
         
         # Final verdict
-        if not self.errors and not self.warnings:
+        if not self.errors and not self.warnings and not self.category_mismatches and len(empty_folder_infos) == 0:
             print("✅ VALIDATION PASSED: Structure and filenames are correct!")
-        elif not self.errors and len(other_warnings) == 0 and len(duplicate_warnings) == 0 and len(empty_folder_warnings) > 0:
+        elif not self.errors and len(other_warnings) == 0 and len(duplicate_warnings) == 0 and len(empty_folder_infos) > 0 and not self.category_mismatches:
             print("✅ VALIDATION PASSED: Structure and filenames are correct!")
             print("   (Some folders are empty but this is acceptable)")
         elif not self.errors and len(duplicate_warnings) > 0:
             print("⚠️  VALIDATION PASSED WITH WARNINGS: Duplicate files detected!")
             print("   It is imperative to remove duplicates before training.")
+            if self.category_mismatches:
+                print("   Also found annotation files with incorrect category fields.")
+        elif not self.errors and self.category_mismatches:
+            print("⚠️  VALIDATION PASSED WITH WARNINGS: Annotation category mismatches detected!")
+            print(f"   Fix these before training using {BOLD}fix_category_annotations.py{RESET}")
         elif not self.errors:
             print("⚠️  VALIDATION PASSED WITH WARNINGS: Check warnings above.")
             if self.mode != 'train':
                 print("   Consider using 2_rename_files.py to fix common filename issues.")
         else:
             # Check if errors include cross-split duplicates
-            if self.stats.get('cross_split_duplicates', 0) > 0:
+            if self.stats.get('cross_split_duplicates', 0) > 0 and self.mode == 'train': 
                 print(f"{RED}{BOLD}❌ VALIDATION FAILED: CRITICAL - Cross-split duplicates detected!{RESET}")
                 print(f"   {RED}{BOLD}Found {self.stats['cross_split_duplicates']} file(s) duplicated across train/val/test splits.{RESET}")
                 print("   This will cause data leakage and MUST be fixed before training!")

@@ -14,9 +14,9 @@ Collections/
 
 Example:
     python fix_category_annotations.py /path/to/Collections
-    python fix_category_annotations.py /path/to/Collections --fix --backup
+    python fix_category_annotations.py /path/to/Collections --run --backup
 
-By default this is a dry run (no files are changed). Use --fix to write changes.
+By default this is a dry run (no files are changed). Use --run to write changes.
 """
 
 from __future__ import annotations
@@ -27,6 +27,10 @@ import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
 
 def find_json_files(collections_root: Path) -> List[Path]:
     """
@@ -107,6 +111,7 @@ def backup_file(path: Path) -> Path:
 
 
 def main(argv: List[str] | None = None) -> int:
+    global GREEN, YELLOW, RESET
     parser = argparse.ArgumentParser(
         description="Verify and optionally fix 'category' fields in annotation JSON files."
     )
@@ -116,14 +121,14 @@ def main(argv: List[str] | None = None) -> int:
         help='Path to the "Collections" directory',
     )
     parser.add_argument(
-        "--fix",
+        "--run",
         action="store_true",
         help="Write changes to files by replacing any mismatched 'category' with the category folder name.",
     )
     parser.add_argument(
         "--backup",
         action="store_true",
-        help="When used with --fix, create a .bak (or .bakN) backup before writing.",
+        help="When used with --run, create a .bak (or .bakN) backup before writing.",
     )
     parser.add_argument(
         "--quiet",
@@ -165,7 +170,7 @@ def main(argv: List[str] | None = None) -> int:
             print(f"ERROR reading {jp}: {e}", file=sys.stderr)
             continue
 
-        t, m, mm, changed_flag = validate_and_optionally_fix(data, expected, args.fix)
+        t, m, mm, changed_flag = validate_and_optionally_fix(data, expected, args.run)
 
         total_annots += t
         total_matches += m
@@ -174,9 +179,17 @@ def main(argv: List[str] | None = None) -> int:
         if mm > 0:
             files_with_mismatch += 1
             if args.print_mismatches and not args.quiet:
-                print(f"[MISMATCH] {jp} — expected category '{expected}', {mm} / {t} mismatched")
+                # Collect actual categories found in mismatched annotations
+                actual_cats = set()
+                for a in data.get("annotations", []):
+                    if isinstance(a, dict):
+                        cat = a.get("category")
+                        if cat and cat != expected:
+                            actual_cats.add(cat)
+                actual_cats_str = ", ".join(f"'{c}'" for c in sorted(actual_cats))
+                print(f"[MISMATCH] {jp} — folder category: '{expected}', annotation categories: {actual_cats_str}, {mm} / {t} mismatched")
 
-        if args.fix and changed_flag:
+        if args.run and changed_flag:
             try:
                 if args.backup:
                     backup_path = backup_file(jp)
@@ -185,14 +198,25 @@ def main(argv: List[str] | None = None) -> int:
                 save_json(jp, data)
                 files_changed += 1
                 if not args.quiet:
-                    print(f"Fixed: {jp} (set category -> '{expected}')")
+                    print(f"[{BOLD}{GREEN}FIXED{RESET}]: {jp} (folder category: {BOLD}{GREEN}'{expected}'{RESET}, corrected {mm} annotations)")
             except Exception as e:
                 print(f"ERROR writing {jp}: {e}", file=sys.stderr)
 
         else:
             if not args.quiet:
-                status = "OK" if mm == 0 else "NEEDS FIX"
-                print(f"[{status}] {jp} — annots: {t}, matches: {m}, mismatches: {mm}")
+                # Collect actual categories for better logging
+                actual_cats = set()
+                for a in data.get("annotations", []):
+                    if isinstance(a, dict):
+                        cat = a.get("category")
+                        if cat:
+                            actual_cats.add(cat)
+                actual_cats_str = ", ".join(f"'{c}'" for c in sorted(actual_cats))
+                status = f"{GREEN}OK{RESET}" if mm == 0 else f"{YELLOW}NEEDS FIX{RESET}"
+                if mm == 0:
+                    print(f"[{status}] {jp} — folder category: '{expected}', annotation category: '{expected}', annots: {t}")
+                else:
+                    print(f"[{status}] {jp} — folder category: {BOLD}'{expected}'{RESET}, annotation categories: {BOLD}{YELLOW}{actual_cats_str}{RESET}, annots: {t}, matches: {m}, mismatches: {mm}")
 
     print("\nSummary")
     print("-------")
@@ -202,10 +226,15 @@ def main(argv: List[str] | None = None) -> int:
     print(f"Total annotations:    {total_annots}")
     print(f"Matching categories:  {total_matches}")
     print(f"Mismatched categories:{total_mismatches}")
-    if args.fix:
-        print("\nCompleted with --fix: mismatched 'category' fields were set to the category folder name where needed.")
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+    if files_with_mismatch == 0:
+        print(f"\n{GREEN}All files are consistent. No changes needed.{RESET}")
+    elif args.run:
+        print("\nCompleted with --run: mismatched 'category' fields were set to the category folder name where needed.")
     else:
-        print("\nDry run complete. Re-run with --fix to apply changes.")
+        print(f"\n{YELLOW}Dry run complete. Re-run with --run to apply changes.{RESET}")
 
     return 0
 
