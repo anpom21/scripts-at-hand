@@ -315,10 +315,13 @@ def _default_system_python3() -> str:
     Returns:
         Absolute path to python3 (or 'python3' if not found).
     """
-
+    venv_python = Path(str(sys.prefix) +"/bin/python3")
+    if venv_python.exists():
+        return str(venv_python)
     import shutil
 
     path = shutil.which("python3")
+    print("Default system python3 path:", path)
     return path or "python3"
 
 
@@ -614,7 +617,7 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
     # 2) Repository scripts
     for repo in cfg.get("repositories", []) or []:
         rname = repo.get("name", "repo")
-        rpath = Path(repo.get("path", ""))
+        rpath = Path(repo.get("path", "")).expanduser()
         rpy = repo.get("python3", default_py)
         rexec = repo.get("execution_path", str(rpath))
         rscripts = repo.get("scripts", []) or []

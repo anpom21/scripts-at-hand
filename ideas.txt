@@ -1,3 +1,7 @@
 Ideas: 
 - Make config refresh messages also include changes to repositories
 - Make sure refresh updates scripts new python path if the repository python path has changed
+
+- Add logging to modification scripts and a way to reverse any changes.
+- Make sort also move images to 'images/' folder
+- Make a check if it is the first time running.

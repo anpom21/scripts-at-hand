@@ -47,25 +47,50 @@ git clone https://github.com/yourusername/aris-cli.git
 cd aris-cli
 ```
 
+### 2) Install dependencies
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+To use some GUI scripts (e.g., `collection_sorter.py`), a workaround is needed to ensure tkinter works correctly in uv virtual environments. Run the following commands to copy the system's tkinter library into the uv venv:
+
+```bash
+uv venv --python /usr/bin/python3.12 .venv
+```
+
+Then source and sync the libraries:
+
+```bash
+source .venv/bin/activate
+uv sync --active
+```
 
 ### 2) Add `aris` as a command
 
 Add an alias to your `~/.bashrc` and source the completion script:
 
 ```bash
-alias aris='/path/to/aris-cli/main.sh'
-source <(aris completion bash)
+echo "#>>> aris-cli initialize >>>" >> ~/.bashrc
+echo "alias aris='$(pwd)/main.sh'" >> ~/.bashrc
+echo "source <(aris completion bash)" >> ~/.bashrc
+echo "#<<< aris-cli initialize <<<" >> ~/.bashrc
+source ~/.bashrc
 ```
+
+## Usage
 
 ### 2) Add scripts
 
 Put scripts in `scripts/` (supports `.py` and `.sh`). Nested paths are allowed.
 
 **Script naming:**
+
 - Scripts keep their original filenames (e.g., `2_rename_files.py`)
 - Only when name collisions occur will parent directory names be prepended
 - Example: If two scripts named `run.py` exist, they might become `helper_scripts_run.py` and `other_scripts_run.py`.
-If the folder structure is:
+  If the folder structure is:
+
 ```
 scripts/
 ├── helper_scripts/
@@ -80,17 +105,18 @@ Edit `config.yaml`:
 
 ```yaml
 repositories:
-- name: Annotation
-  path: /home/simon/Annotation
-  python3: /home/simon/Annotation/.venv/bin/python3
-  execution_path: /home/simon/Annotation  # optional: working directory for scripts
-  scripts:
-  - segment.py
+  - name: Annotation
+    path: /home/simon/Annotation
+    python3: /home/simon/Annotation/.venv/bin/python3
+    execution_path: /home/simon/Annotation # optional: working directory for scripts
+    scripts:
+      - segment.py
 
 scripts: []
 ```
 
 On every run, `aris` refreshes and writes the bottom `scripts:` section with:
+
 - `name`: Script name as invoked via CLI
 - `python3`: Path to Python interpreter (or NAN for shell scripts)
 - `execution_path`: Working directory where script executes
@@ -101,6 +127,7 @@ On every run, `aris` refreshes and writes the bottom `scripts:` section with:
 Autocomplete now includes all scripts from both local and configured repositories.
 
 **Usage examples:**
+
 - Type `aris sync_an` and press TAB → completes to `aris sync_and_sort_images.sh`
 - Type `aris sy` and press TAB → shows all scripts starting with "sy": `sync_and_sort_images.sh`, `sync_image_files.py`, `synthesize.py`
 - After the script name, TAB provides file/directory completion for script arguments
@@ -151,16 +178,17 @@ Create short aliases for frequently-used scripts by adding a `shortcut` field in
 
 ```yaml
 scripts:
-- name: 0_summarise_imgs_and_annots.py
-  python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
-  execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
-  hash_id: 392807cfb50f39822e08a6c9efb39986cd83f5c0de13ef3148ba42e091575acf
-  source: local
-  shortcut: summarise
-  tags: [training_bible, organize_data]
+  - name: 0_summarise_imgs_and_annots.py
+    python3: /home/simon/.pyenv/versions/3.8.10/bin/python3
+    execution_path: /home/simon/aris-cli/scripts/the_training_bible/organize_data
+    hash_id: 392807cfb50f39822e08a6c9efb39986cd83f5c0de13ef3148ba42e091575acf
+    source: local
+    shortcut: summarise
+    tags: [training_bible, organize_data]
 ```
 
 **Usage:**
+
 ```bash
 # Instead of typing the full name:
 aris 0_summarise_imgs_and_annots.py --help
@@ -170,16 +198,19 @@ aris summarise --help
 ```
 
 **Collision Detection:**
+
 - Shortcuts must be unique across all scripts
 - Cannot conflict with reserved commands: `search`, `refresh`, `completion`, `help`
 - Cannot conflict with existing script names
 - Conflicts are automatically disabled with warnings printed to stderr
 
 **Autocompletion:**
+
 - Shortcuts are included in bash completion
 - Type `aris sum` + TAB → completes to `aris summarise`
 
 **Display:**
+
 - `aris --list` shows shortcuts in dim gray next to script names
 - Example: `0_summarise_imgs_and_annots.py (summarise)`
 
@@ -189,23 +220,26 @@ Organize scripts with tags for better search and discovery:
 
 ```yaml
 scripts:
-- name: 0_summarise_imgs_and_annots.py
-  shortcut: summarise
-  tags: [training_bible, organize_data, move]
+  - name: 0_summarise_imgs_and_annots.py
+    shortcut: summarise
+    tags: [training_bible, organize_data, move]
 ```
 
 **Search Priority:**
+
 - Tags have the highest search priority (even higher than script names)
 - Searching for a tag instantly brings up all tagged scripts
 - Matching tags are displayed in **bold cyan** in search results
 
 **Source as Special Tag:**
+
 - Non-local sources (repository names) automatically act as searchable tags
 - Displayed in **bold yellow** when they match your search
 - Search for "annotation" to find all scripts from the Annotation repository
 - Search for "classification" to find all Classification scripts
 
 **Tag Display in Search:**
+
 ```
 1. segment.py [Annotation]
    tags: Annotation  (in bold yellow)
@@ -217,6 +251,7 @@ scripts:
 ### Configuration Management
 
 #### Quick Config Access
+
 Open the config file quickly without remembering the path:
 
 ```bash
@@ -227,12 +262,14 @@ aris -c          # Short form
 Prints: `Opening config: /home/simon/aris-cli/config.yaml`
 
 Uses the best available editor:
+
 1. `$EDITOR` environment variable (if set)
 2. `xdg-open` (Linux GUI applications)
 3. `open` (macOS)
 4. Fallbacks: `vim`, `nano`, `vi`
 
 #### Reset Configuration
+
 Reset per-script overrides while preserving shortcuts and tags:
 
 ```bash
@@ -240,6 +277,7 @@ aris --reset-config
 ```
 
 This resets:
+
 - `python3` path
 - `execution_path`
 - `name` (script name)
@@ -247,10 +285,12 @@ This resets:
 - `source`
 
 But **preserves**:
+
 - `shortcut`
 - `tags`
 
 Useful when:
+
 - Python environment changes
 - Scripts are moved to different directories
 - Repository structure is reorganized
@@ -258,6 +298,7 @@ Useful when:
 #### YAML Formatting Preservation
 
 The config file now preserves your custom formatting:
+
 - **Comments** are maintained (including header comments)
 - **Blank lines** between entries are preserved
 - **Indentation** and structure remain unchanged
@@ -270,33 +311,33 @@ You can safely add comments and organize your config:
 #                                 Repositories                                 #
 # ---------------------------------------------------------------------------- #
 repositories:
-- name: Annotation
-  path: /home/simon/Annotation
-  python3: /home/simon/Annotation/.venv/bin/python3
-  scripts:
-  - segment.py
-  - review_annotations.py
+  - name: Annotation
+    path: /home/simon/Annotation
+    python3: /home/simon/Annotation/.venv/bin/python3
+    scripts:
+      - segment.py
+      - review_annotations.py
 
-- name: Synthetics
-  path: /home/simon/Documents/Synthetics
-  python3: /home/simon/Documents/Synthetics/.venv/bin/python3
-  scripts:
-  - run.sh
-  - synthesize.py
+  - name: Synthetics
+    path: /home/simon/Documents/Synthetics
+    python3: /home/simon/Documents/Synthetics/.venv/bin/python3
+    scripts:
+      - run.sh
+      - synthesize.py
 
 # ---------------------------------------------------------------------------- #
 #                                    Scripts                                   #
 # ---------------------------------------------------------------------------- #
 scripts:
-- name: segment.py
-  source: Annotation
-  shortcut: segment
-  tags: [ml, annotation]
+  - name: segment.py
+    source: Annotation
+    shortcut: segment
+    tags: [ml, annotation]
 
-- name: synthesize.py
-  source: Synthetics
-  shortcut: synth
-  tags: [data_generation, training]
+  - name: synthesize.py
+    source: Synthetics
+    shortcut: synth
+    tags: [data_generation, training]
 ```
 
 Running `aris --refresh` will **not** remove your comments or blank lines!
@@ -306,18 +347,21 @@ Running `aris --refresh` will **not** remove your comments or blank lines!
 The interactive search (`aris search`) includes several powerful features:
 
 **Search Priority (highest to lowest):**
+
 1. **Tags and Source** - Scripts with matching tags or source repositories appear first
 2. **Script Name** - Scripts with matches in their name
 3. **Description** - Scripts with matches in their description
 4. **Shortcuts** - Scripts with shortcuts always rank higher within their priority group
 
 **Color Coding:**
+
 - **Red**: Matching text in script names
 - **Cyan**: Matching tags
 - **Yellow**: Matching source (repository name)
 - **Dim Gray**: Non-matching metadata (descriptions, tags, sources)
 
 **Example Search Results:**
+
 ```
 Search: training
 
@@ -325,10 +369,10 @@ Found 5 result(s):
 
   1. 0_summarise_imgs_and_annots.py [local]
      tags: training_bible, organize_data, move
-  
+
   2. train.py [Classification]
      tags: Classification
-     
+
   3. generate_training_data.py [local]
      Generates synthetic training data for model...
 ```
@@ -389,16 +433,19 @@ aris -h
 ## Core Features Summary
 
 ### Smart Script Naming
+
 - Scripts maintain their original filenames
 - Collision resolution only when necessary
 - Clear error messages for duplicate content
 
 ### Hash-based Collision Detection
+
 - Detects when multiple scripts have identical content
 - Warns about duplicate functionality
 - Helps maintain clean script organization
 
 ### Execution Path Control
+
 - Scripts can specify their working directory
 - Supports relative path dependencies
 - Per-repository and per-script configuration

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, font as tkFont
 from pathlib import Path
 import argparse
 import subprocess
@@ -40,10 +40,16 @@ class ImageSortingTool:
         self.annotation_preference = False  # Track user's preference for annotation overlay
         self.annotation_button = None
         
+        # UI Zoom configuration (continuous with 0.2 increments)
+        self.ui_zoom = 1.0  # Current zoom level
+        self.ui_zoom_increment = 0.2  # Zoom step size
+        self.ui_zoom_min = 0.4  # Minimum zoom
+        self.ui_zoom_max = 3.0  # Maximum zoom
+        
         # GUI
         self.root = tk.Tk()
         self.root.title("Image Collection Sorting Tool")
-        self.root.geometry("1200x900")
+        self.root.geometry("1800x1200")
         
         # Validate and load directory
         if not self.validate_directory():
@@ -211,7 +217,7 @@ class ImageSortingTool:
         
         if not subdirs:
             contents = list(self.capture_dir.iterdir())
-            msg = f"No category folders found in: {self.capture_dir}\n\n"
+            msg = f"No category folders found in: {Path(self.capture_dir).resolve()}\n\n"
             if contents:
                 msg += "Contents:\n"
                 msg += "\n".join([f"  - {item.name}" for item in contents[:10]])
@@ -237,7 +243,7 @@ class ImageSortingTool:
         
         if not self.images_by_category:
             messagebox.showwarning("No Images Found", 
-                f"No images found in any category folder.\nSupported formats: .png, .jpg, .jpeg\n\nPlease select a directory with images.")
+                f"No images found in any category folder found in\n{Path(self.capture_dir).resolve()}\nSupported formats: .png, .jpg, .jpeg\n\nPlease select a directory with images.")
             self.change_directory()
             return False
         
@@ -424,100 +430,225 @@ class ImageSortingTool:
         """Show the start screen with category summary."""
         # Refresh data and clear any existing widgets
         self.reload_images()
+        
         # Clear any existing widgets
         for widget in self.root.winfo_children():
             widget.destroy()
         
+        # Force update to ensure all widgets are cleared
+        self.root.update_idletasks()
+        
         frame = ttk.Frame(self.root, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
         
+        # Top bar with Change Directory button and info
+        top_bar = ttk.Frame(frame)
+        top_bar.pack(fill=tk.X, pady=(0, 10), anchor='w')
+        
+        # Use tk.Button instead of ttk.Button to support font parameter
+        change_dir_btn = tk.Button(top_bar, text="Change Directory", command=self.change_directory,
+                                   font=('Arial', int(10 * self.ui_zoom)), 
+                                   padx=int(5 * self.ui_zoom), pady=int(2 * self.ui_zoom))
+        change_dir_btn.pack(anchor='w')
+        
+        # Collection name (parent directory of capture directory)
+        collection_name = self.capture_dir.parent.name
+        collection_frame = ttk.Frame(top_bar)
+        collection_frame.pack(anchor='w', pady=(2, 0))
+        ttk.Label(collection_frame, text="Collection:", font=('Arial', int(12 * self.ui_zoom), 'bold')).pack(side=tk.LEFT)
+        ttk.Label(collection_frame, text=f" {collection_name}", font=('Arial', int(12 * self.ui_zoom))).pack(side=tk.LEFT)
+        
+        # Capture name (full path to capture directory)
+        capture_frame = ttk.Frame(top_bar)
+        capture_frame.pack(anchor='w', pady=(2, 0))
+        ttk.Label(capture_frame, text="Capture:", font=('Arial', int(12 * self.ui_zoom), 'bold')).pack(side=tk.LEFT)
+        ttk.Label(capture_frame, text=f" {Path(self.capture_dir).name}", font=('Arial', int(12 * self.ui_zoom))).pack(side=tk.LEFT)
+        
         # Title
-        title = ttk.Label(frame, text="Image Collection Sorting Tool", font=('Arial', 20, 'bold'))
+        title = ttk.Label(frame, text="Image Collection Sorting Tool", font=('Arial', int(30 * self.ui_zoom), 'bold'))
         title.pack(pady=20)
         
-        # Summary label centered
-        summary_label = ttk.Label(frame, text="Capture Directory Summary", font=('Arial', 14))
-        summary_label.pack(pady=5)
-
-        # Update summary button centered below title
-        update_btn = ttk.Button(frame, text="Update Summary", command=self.show_start_screen)
-        update_btn.pack(pady=5)
-        
-        # Create summary table
-        table_frame = ttk.Frame(frame)
-        table_frame.pack(pady=10)
-        
-        # Treeview for table (no scrollbar, fixed height)
-        columns = ('Category', 'Image Count', 'Duplicates')
-        tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=len(self.images_by_category))
-        
-        tree.heading('Category', text='Category')
-        tree.heading('Image Count', text='Image Count')
-        tree.heading('Duplicates', text='Duplicates')
-        
-        tree.column('Category', width=400, anchor='w')
-        tree.column('Image Count', width=150, anchor='center')
-        tree.column('Duplicates', width=150, anchor='center')
-        
-        total_images = 0
-        for category, images in sorted(self.images_by_category.items()):
-            count = len(images)
-            total_images += count
-            duplicates = self.find_duplicates_per_category(category)
-            tree.insert('', tk.END, values=(category, count, duplicates))
-        
-        tree.pack()
-        
-        # Statistics
-        duplicate_count = self.find_duplicates()
-        stats_text = f"Total Images: {total_images}  |  Duplicate Filenames: {duplicate_count}"
-        stats_label = ttk.Label(frame, text=stats_text, font=('Arial', 12))
-        stats_label.pack(pady=10)
-
-        # If duplicates exist, show a button to run the duplicates script
-        if duplicate_count > 0:
-            dup_btn = ttk.Button(frame, text=f"Run Duplicates Script ({duplicate_count})", 
-                                 command=lambda: (self.run_duplicates_script(), self.show_start_screen()))
-            dup_btn.pack(pady=5)
-        
         # Instructions
-        instructions = ttk.Label(frame, text="Select a category to start sorting:", font=('Arial', 12, 'bold'))
+        instructions = ttk.Label(frame, text="Select a category to start sorting:", font=('Arial', int(18 * self.ui_zoom), 'bold'))
         instructions.pack(pady=10)
         
-        # Category buttons in matrix layout
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(pady=10)
+        # Create main content frame with margins (1/5 on each side)
+        content_frame = ttk.Frame(frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Left margin (1/5 width)
+        left_margin = ttk.Frame(content_frame)
+        left_margin.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Center frame for category buttons (3/5 width)
+        center_frame = ttk.Frame(content_frame)
+        center_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Right margin (1/5 width)
+        right_margin = ttk.Frame(content_frame)
+        right_margin.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Category buttons in matrix layout (no scrolling)
+        button_frame = ttk.Frame(center_frame)
+        button_frame.pack(pady=10, fill=tk.BOTH, expand=True)
         
         categories = sorted(self.images_by_category.keys())
-        
+        # Reset current_category
+        self.current_category = None
+
         # Calculate layout: max 4 columns, adjust based on number of categories
         max_cols = min(4, len(categories))
+        
+        # Store labels for font size updates
+        category_labels = []
         
         for i, category in enumerate(categories):
             row = i // max_cols
             col = i % max_cols
             btn_text = self.format_category_label(category, threshold=45)
-            btn = ttk.Button(button_frame, text=btn_text, 
-                           command=lambda c=category: self.start_sorting(c),
-                           width=40)
-            btn.grid(row=row, column=col, padx=5, pady=5, sticky='ew')
+            image_count = len(self.images_by_category[category])
+            
+            # Create a clickable frame that acts as a button
+            btn = tk.Frame(button_frame, relief=tk.RAISED, borderwidth=1, cursor="hand2",
+                          bg='#f0f0f0', padx=5, pady=5)
+            btn.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
+            
+            # Left label with category name - use larger default font for better emoji display
+            left_label = tk.Label(btn, text=btn_text, anchor='w', bg='#f0f0f0', font=("TkDefaultFont", 11))
+            left_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            # Right label with count
+            right_label = tk.Label(btn, text=f"({image_count})", anchor='e', bg='#f0f0f0', font=('Arial', 10))
+            right_label.pack(side=tk.RIGHT)
+            
+            # Store labels for font updates
+            category_labels.append((left_label, right_label))
+            
+            # Make the frame and labels clickable
+            def make_handler(cat):
+                return lambda e: self.start_sorting(cat)
+            
+            handler = make_handler(category)
+            btn.bind("<Button-1>", handler)
+            left_label.bind("<Button-1>", handler)
+            right_label.bind("<Button-1>", handler)
+            
+            # Add hover effect
+            def on_enter(e, frame=btn, left=left_label, right=right_label):
+                frame.config(bg='#e0e0e0')
+                left.config(bg='#e0e0e0')
+                right.config(bg='#e0e0e0')
+            
+            def on_leave(e, frame=btn, left=left_label, right=right_label):
+                frame.config(bg='#f0f0f0')
+                left.config(bg='#f0f0f0')
+                right.config(bg='#f0f0f0')
+            
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+            left_label.bind("<Enter>", on_enter)
+            left_label.bind("<Leave>", on_leave)
+            right_label.bind("<Enter>", on_enter)
+            right_label.bind("<Leave>", on_leave)
+        
+        # Configure grid columns to expand evenly with window size
+        for col in range(max_cols):
+            button_frame.columnconfigure(col, weight=1)
+        
+        # Configure grid rows to expand as well (optional, for vertical spacing)
+        num_rows = (len(categories) + max_cols - 1) // max_cols
+        for row in range(num_rows):
+            button_frame.rowconfigure(row, weight=1)
+        
+        # Function to update font sizes based on button dimensions
+        def update_font_sizes(event=None):
+            button_frame.update_idletasks()
+            frame_height = button_frame.winfo_height()
+            frame_width = button_frame.winfo_width()
+            
+            # Calculate font size based on button width
+            # Use approximately 1/30 of button width as base font size
+            if max_cols > 0 and frame_width > 0:
+                button_width = frame_width / max_cols
+                base_font_size = max(8, min(24, int(button_width / 22)))
+            else:
+                base_font_size = 10
+            
+            # Update all label fonts
+            for left_label, right_label in category_labels:
+                left_label.config(font=('Arial', base_font_size))
+                right_label.config(font=('Arial', base_font_size))
+        
+        # Bind to window resize and initial update
+        button_frame.bind('<Configure>', update_font_sizes)
+        self.root.after(100, update_font_sizes)
+        
+        # Statistics below buttons
+        total_images = sum(len(images) for images in self.images_by_category.values())
+        duplicate_count = self.find_duplicates()
+        
+        stats_frame = ttk.Frame(center_frame)
+        stats_frame.pack(pady=10)
+        
+        stats_text = f"Total Images: {total_images}  |  Duplicate Filenames: {duplicate_count}"
+        stats_label = ttk.Label(stats_frame, text=stats_text, font=('Arial', int(12 * self.ui_zoom)))
+        stats_label.pack()
+        
+        # If duplicates exist, show a button to run the duplicates script
+        if duplicate_count > 0:
+            dup_btn = tk.Button(stats_frame, text=f"Run Duplicates Script ({duplicate_count})", 
+                                command=lambda: (self.run_duplicates_script(), self.show_start_screen()),
+                                font=('Arial', int(10 * self.ui_zoom)),
+                                padx=int(5 * self.ui_zoom), pady=int(2 * self.ui_zoom))
+            dup_btn.pack(pady=5)
         
         # Directory path - label on separate line, path selectable
         path_frame = ttk.Frame(frame)
         path_frame.pack(side=tk.BOTTOM, pady=10, fill=tk.X)
         
-        # Change directory button
-        change_dir_btn = ttk.Button(path_frame, text="Change Directory", command=self.change_directory)
-        change_dir_btn.pack(anchor='w', pady=(0, 5))
-        
         path_label = ttk.Label(path_frame, text="Directory:", font=('Arial', 9), foreground='gray')
         path_label.pack(anchor='w')
         
-        path_text = tk.Text(path_frame, height=1, font=('Arial', 9), foreground='gray', 
+        # Frame for text and scrollbar
+        path_text_frame = ttk.Frame(path_frame)
+        path_text_frame.pack(fill=tk.X)
+        
+        path_text = tk.Text(path_text_frame, height=1, font=('Arial', 9), foreground='gray', 
                            relief=tk.FLAT, wrap=tk.NONE, borderwidth=0, highlightthickness=0)
         path_text.insert('1.0', str(self.capture_dir))
         path_text.config(state='disabled')  # Make read-only but still selectable
-        path_text.pack(fill=tk.X)
+        
+        # Add horizontal scrollbar
+        path_scrollbar = ttk.Scrollbar(path_text_frame, orient=tk.HORIZONTAL, command=path_text.xview)
+        path_text.config(xscrollcommand=path_scrollbar.set)
+        
+        path_text.pack(side=tk.TOP, fill=tk.X, expand=True)
+        
+        # Show scrollbar only if text content is wider than the widget
+        def check_scrollbar_needed():
+            path_text.update_idletasks()
+            # Get the bbox of all content in the text widget
+            try:
+                bbox = path_text.bbox("1.0")
+                end_bbox = path_text.bbox("end-1c")
+                if bbox and end_bbox:
+                    text_width = path_text.winfo_width()
+                    # If text extends beyond visible area, show scrollbar
+                    if len(str(self.capture_dir)) > 80:  # Heuristic: long paths likely need scrolling
+                        path_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+            except:
+                # If we can't determine, show scrollbar for paths longer than 80 chars
+                if len(str(self.capture_dir)) > 80:
+                    path_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+
+        # Schedule check after widget is fully rendered
+        self.root.after(100, check_scrollbar_needed)
+        
+        # Set up keyboard bindings for zoom in main menu
+        self.root.bind("<plus>", lambda e: self.cycle_ui_zoom(1))
+        self.root.bind("<equal>", lambda e: self.cycle_ui_zoom(1))  # + without shift
+        self.root.bind("<minus>", lambda e: self.cycle_ui_zoom(-1))
     
     def change_directory(self):
         """Open a folder picker to change the capture directory."""
@@ -577,35 +708,50 @@ class ImageSortingTool:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Get current UI zoom level
+        ui_zoom = self.ui_zoom
+        
         # Top menu bar
         menu_frame = ttk.Frame(main_frame, relief=tk.RIDGE, borderwidth=1)
         menu_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
         
-        back_btn = ttk.Button(menu_frame, text="← Back to Menu", command=self.show_start_screen)
+        # Use tk.Button instead of ttk.Button to support font scaling
+        back_btn = tk.Button(menu_frame, text="↑ Back to Menu", command=self.show_start_screen,
+                            font=('Arial', int(10 * ui_zoom)), padx=int(5 * ui_zoom), pady=int(3 * ui_zoom))
         back_btn.pack(side=tk.LEFT, padx=5, pady=3)
         
-        apply_btn = ttk.Button(menu_frame, text="Apply Moves (Space)", command=self.apply_moves)
+        apply_btn = tk.Button(menu_frame, text="Apply Moves (Space)", command=self.apply_moves,
+                             font=('Arial', int(10 * ui_zoom)), padx=int(5 * ui_zoom), pady=int(3 * ui_zoom))
         apply_btn.pack(side=tk.LEFT, padx=5, pady=3)
         
-        nav_label = ttk.Label(menu_frame, text="Navigate: ← → arrows", font=('Arial', 9))
+        nav_label = ttk.Label(menu_frame, text=f"Navigate: ← → arrows | Zoom: +/- ({ui_zoom:.1f}x)", 
+                             font=('Arial', int(9 * ui_zoom)))
         nav_label.pack(side=tk.LEFT, padx=15, pady=3)
         
         # Content frame with left and right sections
         content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Left frame for categories
-        left_frame = ttk.Frame(content_frame, relief=tk.RIDGE, borderwidth=2, width=350)
+        # Left frame for categories - width scales with zoom
+        left_frame_width = int(350 * ui_zoom)
+        left_frame = ttk.Frame(content_frame, relief=tk.RIDGE, borderwidth=2, width=left_frame_width)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 5))
         left_frame.pack_propagate(False)
         
-        # Category label
-        cat_label = ttk.Label(left_frame, text="Move to Category:", font=('Arial', 11, 'bold'))
+        # Category label - font scales with zoom
+        cat_label = ttk.Label(left_frame, text="Move to Category:", font=('Arial', int(11 * ui_zoom), 'bold'))
         cat_label.pack(pady=5)
         
-        # Frame for category buttons in 2-column grid
-        self.cat_button_frame = ttk.Frame(left_frame)
-        self.cat_button_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Create canvas and scrollbar for category buttons
+        cat_canvas = tk.Canvas(left_frame, borderwidth=0, highlightthickness=0)
+        cat_scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=cat_canvas.yview)
+        self.cat_button_frame = ttk.Frame(cat_canvas)
+        
+        # Configure canvas scrolling
+        cat_canvas.configure(yscrollcommand=cat_scrollbar.set)
+        
+        # Create window in canvas for the frame
+        cat_canvas_window = cat_canvas.create_window((0, 0), window=self.cat_button_frame, anchor="nw")
         
         # Store category buttons for later reference
         self.category_buttons = {}
@@ -619,16 +765,22 @@ class ImageSortingTool:
             col = i % 2
             btn_text = self.format_category_label(category, threshold=20)
             
+            # Scale button properties with UI zoom
+            btn_height = int(2 * ui_zoom)
+            btn_font_size = int(11 * ui_zoom)
+            
             # Disable button if it's the current category being sorted
             if category == self.current_category:
                 btn = tk.Button(self.cat_button_frame, text=btn_text,
-                               width=20, height=2, wraplength=180,
+                               width=20, height=btn_height, wraplength=int(180 * ui_zoom),
+                               font=("TkDefaultFont", btn_font_size),
                                bg="#7ED3F0", fg='black',  # Light blue for current category
                                state='disabled', disabledforeground='black')
             else:
                 btn = tk.Button(self.cat_button_frame, text=btn_text,
                                command=lambda c=category: self.mark_for_move(c),
-                               width=20, height=2, wraplength=180,
+                               width=20, height=btn_height, wraplength=int(180 * ui_zoom),
+                               font=("TkDefaultFont", btn_font_size),
                                activebackground='#d3d3d3')  # Slightly darker gray for hover
             
             btn.grid(row=row, column=col, padx=3, pady=3, sticky='nsew')
@@ -638,22 +790,81 @@ class ImageSortingTool:
         self.cat_button_frame.columnconfigure(0, weight=1)
         self.cat_button_frame.columnconfigure(1, weight=1)
         
+        # Function to update canvas scroll region and check if scrollbar is needed
+        def update_scrollregion():
+            self.cat_button_frame.update_idletasks()
+            cat_canvas.config(scrollregion=cat_canvas.bbox("all"))
+            
+            # Check if scrollbar is needed
+            content_height = self.cat_button_frame.winfo_reqheight()
+            canvas_height = cat_canvas.winfo_height()
+            
+            if content_height > canvas_height:
+                cat_scrollbar.pack(side="right", fill="y", padx=(0, 5))
+            else:
+                cat_scrollbar.pack_forget()
+        
+        # Function to update canvas width when frame changes
+        def configure_cat_canvas(event):
+            cat_canvas.itemconfig(cat_canvas_window, width=event.width)
+            # Also update scroll region when window resizes
+            self.root.after(10, update_scrollregion)
+        
+        cat_canvas.bind('<Configure>', configure_cat_canvas)
+        
+        # Enable mouse wheel scrolling only when hovering over the category area
+        def on_mousewheel(event):
+            cat_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def on_linux_scroll_up(event):
+            cat_canvas.yview_scroll(-1, "units")
+            
+        def on_linux_scroll_down(event):
+            cat_canvas.yview_scroll(1, "units")
+        
+        # Bind to canvas and frame (not bind_all)
+        cat_canvas.bind("<MouseWheel>", on_mousewheel)
+        cat_canvas.bind("<Button-4>", on_linux_scroll_up)
+        cat_canvas.bind("<Button-5>", on_linux_scroll_down)
+        self.cat_button_frame.bind("<MouseWheel>", on_mousewheel)
+        self.cat_button_frame.bind("<Button-4>", on_linux_scroll_up)
+        self.cat_button_frame.bind("<Button-5>", on_linux_scroll_down)
+        
+        # Pack canvas first
+        cat_canvas.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
+        
+        # Schedule scrollbar check after window is fully rendered
+        self.root.after(100, update_scrollregion)
+        
         # Right frame for image display
         image_frame = ttk.Frame(content_frame, relief=tk.RIDGE, borderwidth=2)
         image_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        # Top controls frame for annotation toggle
+        # Top controls frame for annotation toggle and image info
         controls_frame = ttk.Frame(image_frame)
         controls_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
         
         # Annotation toggle button (will be shown/hidden based on annotation availability)
-        self.annotation_button = ttk.Button(controls_frame, text="Toggle Annotation Overlay", 
-                                           command=self.toggle_annotation, state='disabled')
+        self.annotation_button = tk.Button(controls_frame, text="Toggle Annotation Overlay", 
+                                           command=self.toggle_annotation, state='disabled',
+                                           font=('Arial', int(9 * ui_zoom)), 
+                                           padx=int(5 * ui_zoom), pady=int(2 * ui_zoom))
         self.annotation_button.pack(side=tk.LEFT, padx=5)
         
-        # Image info label
-        self.info_label = ttk.Label(image_frame, text="", font=('Arial', 10))
-        self.info_label.pack(pady=5)
+        # Image info frame (for category and image count)
+        self.info_frame = ttk.Frame(controls_frame)
+        self.info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        
+        # Image info label - font scales with zoom (will be populated in display_current_image)
+        self.info_label = ttk.Label(self.info_frame, text="", font=('Arial', int(10 * ui_zoom)))
+        self.info_label.pack(side=tk.TOP, anchor='w')
+        
+        # Filename text widget (selectable, read-only)
+        self.filename_text = tk.Text(self.info_frame, height=1, font=('Arial', int(9 * ui_zoom)),
+                                     relief=tk.FLAT, wrap=tk.NONE, borderwidth=0, 
+                                     highlightthickness=0, bg=self.root.cget('bg'))
+        self.filename_text.pack(side=tk.TOP, anchor='w', fill=tk.X)
+        self.filename_text.config(state='disabled')  # Make read-only but still selectable
         
         # Canvas for image display
         self.canvas = tk.Canvas(image_frame, bg='gray30')
@@ -672,6 +883,10 @@ class ImageSortingTool:
         self.root.bind("<Right>", lambda e: self.navigate_image(1))
         self.root.bind("<Up>", lambda e: self.show_start_screen())
         self.root.bind("<space>", lambda e: self.apply_moves())
+        # UI Zoom works in both main menu and sorting screen
+        self.root.bind("<plus>", lambda e: self.cycle_ui_zoom(1))
+        self.root.bind("<equal>", lambda e: self.cycle_ui_zoom(1))  # + without shift
+        self.root.bind("<minus>", lambda e: self.cycle_ui_zoom(-1))
         
         # Display first image
         self.display_current_image()
@@ -679,11 +894,25 @@ class ImageSortingTool:
         # Update button colors for first image
         self.update_all_category_button_colors()
     
+    def cycle_ui_zoom(self, direction):
+        """Cycle through UI zoom levels (+1 for zoom in, -1 for zoom out)."""
+        # Adjust zoom with increment, clamped to min/max
+        self.ui_zoom = max(self.ui_zoom_min, min(self.ui_zoom_max, self.ui_zoom + (direction * self.ui_zoom_increment)))
+        
+        # Refresh the appropriate screen based on current state
+        if self.current_category:
+            # In sorting screen
+            self.show_sorting_screen()
+        else:
+            # In main menu
+            self.show_start_screen()
+    
     def display_current_image(self):
         """Display the current image on the canvas."""
         if not self.current_images:
-            self.info_label.config(text="No images in this category")
-            if self.annotation_button:
+            if hasattr(self, 'info_label') and self.info_label.winfo_exists():
+                self.info_label.config(text="No images in this category")
+            if hasattr(self, 'annotation_button') and self.annotation_button and self.annotation_button.winfo_exists():
                 self.annotation_button.config(state='disabled')
             return
         
@@ -691,11 +920,11 @@ class ImageSortingTool:
         
         # Check if annotation exists for this image
         annotation_path = self.get_annotation_path(current_img_path)
-        if annotation_path and self.annotation_button:
+        if annotation_path and hasattr(self, 'annotation_button') and self.annotation_button and self.annotation_button.winfo_exists():
             self.annotation_button.config(state='normal')
             # Restore annotation overlay if user preference is enabled
             self.show_annotation = self.annotation_preference
-        elif self.annotation_button:
+        elif hasattr(self, 'annotation_button') and self.annotation_button and self.annotation_button.winfo_exists():
             self.annotation_button.config(state='disabled')
             # Can't show annotation if none exists, but keep preference
             self.show_annotation = False
@@ -704,9 +933,26 @@ class ImageSortingTool:
         is_marked = str(current_img_path) in self.moves and not self.moves[str(current_img_path)][1]
         mark_status = " [MARKED FOR MOVE]" if is_marked else ""
         
-        # Update info label
-        info_text = f"Category: {self.current_category} | Image {self.current_image_index + 1}/{len(self.current_images)}{mark_status}\n{current_img_path.name}"
-        self.info_label.config(text=info_text)
+        # Update info label with bold image count
+        info_text = f"Category: {self.current_category} | "
+        if hasattr(self, 'info_label') and self.info_label.winfo_exists():
+            # Configure font to use bold for the image count portion
+            normal_font = ('Arial', int(10 * self.ui_zoom))
+            bold_font = ('Arial', int(10 * self.ui_zoom), 'bold')
+            
+            # Create rich text by combining normal and bold parts
+            self.info_label.config(text=f"{info_text}Image {self.current_image_index + 1}/{len(self.current_images)}{mark_status}", 
+                                   font=normal_font)
+            # Note: For true bold portion, we'd need tk.Text widget, but this keeps it simple
+            # Updating the entire label with bold font for the count portion
+            self.info_label.config(font=bold_font)
+        
+        # Update filename text widget (selectable)
+        if hasattr(self, 'filename_text') and self.filename_text.winfo_exists():
+            self.filename_text.config(state='normal')
+            self.filename_text.delete('1.0', tk.END)
+            self.filename_text.insert('1.0', current_img_path.name)
+            self.filename_text.config(state='disabled')  # Make read-only but selectable
         
         # Load and display image
         try:
@@ -727,6 +973,10 @@ class ImageSortingTool:
     def update_image_display(self, is_marked=False):
         """Update the image display with current zoom and pan."""
         if self.original_image is None:
+            return
+        
+        # Check if canvas still exists
+        if not hasattr(self, 'canvas') or not self.canvas.winfo_exists():
             return
         
         # Get canvas size
@@ -896,11 +1146,19 @@ class ImageSortingTool:
         if not self.current_images:
             return
         
+        # Check if category_buttons exists and contains valid widgets
+        if not hasattr(self, 'category_buttons'):
+            return
+        
         current_img_path = self.current_images[self.current_image_index]
         source = str(current_img_path)
         
         # Reset all buttons (except current category which stays blue and disabled)
         for cat, btn in self.category_buttons.items():
+            # Check if the button widget still exists
+            if not btn.winfo_exists():
+                continue
+                
             if cat == self.current_category:
                 btn.config(bg='#7ED3F0', fg='black', state='disabled', disabledforeground='black')
             else:
@@ -911,7 +1169,9 @@ class ImageSortingTool:
             dest_path = Path(self.moves[source][0])
             target_category = dest_path.parent.name
             if target_category in self.category_buttons and target_category != self.current_category:
-                self.category_buttons[target_category].config(bg='#90EE90', fg='black', activebackground='#70CC70')
+                btn = self.category_buttons[target_category]
+                if btn.winfo_exists():
+                    btn.config(bg='#90EE90', fg='black', activebackground='#70CC70')
     
     def mark_for_move(self, target_category):
         """Mark current image for moving to target category, or unmark if already marked to that category."""
@@ -988,31 +1248,37 @@ class ImageSortingTool:
         self.save_moves_file()
         
         # Reload ALL category images to update counts (including previously empty folders)
-        self.images_by_category.clear()
-        for category_path in self.all_categories:
-            images = self.get_images_in_directory(category_path)
-            if images:
-                self.images_by_category[category_path.name] = images
+        self.reload_images()
+
         
-        # Update categories list
-        self.categories = [d for d in self.all_categories if d.name in self.images_by_category]
-        
-        # Update current category images
-        self.current_images = self.images_by_category.get(self.current_category, [])
-        
-        # Adjust current index if needed
-        if self.current_image_index >= len(self.current_images):
-            self.current_image_index = max(0, len(self.current_images) - 1)
-        
-        # Update display
-        if self.current_images:
-            self.display_current_image()
-            self.update_all_category_button_colors()
+        # Check if we're in a sorting screen (current_category is set)
+        if self.current_category:
+            # Update current category images
+            self.current_images = self.images_by_category.get(self.current_category, [])
+            
+            # Adjust current index if needed
+            if self.current_image_index >= len(self.current_images):
+                self.current_image_index = max(0, len(self.current_images) - 1)
+            
+            # Update display
+            if self.current_images:
+                self.display_current_image()
+                self.update_all_category_button_colors()
+                messagebox.showinfo("Success", f"Successfully moved {success_count} image(s).")
+                return
+            else:
+                messagebox.showinfo("Info", "No more images in this category.")
+                messagebox.showinfo("Success", f"Successfully moved {success_count} image(s).")
+                #self.show_start_screen()
+                return
         else:
-            messagebox.showinfo("Info", "No more images in this category.")
+            # We're on the main menu, refresh it
+            messagebox.showinfo("2Success", f"Successfully moved {success_count} image(s).")
             self.show_start_screen()
-        
-        messagebox.showinfo("Success", f"Successfully moved {success_count} image(s).")
+            
+            return
+        self.show_start_screen()
+        messagebox.showinfo("3Success", f"Successfully moved {success_count} image(s).")
     
     def run(self):
         """Run the application."""
@@ -1021,11 +1287,28 @@ class ImageSortingTool:
 
 def main():
     parser = argparse.ArgumentParser(description='Image Collection Sorting Tool')
-    parser.add_argument('-d', '--capture-dir', default=None, help='Path to the capture directory (defaults to current directory)')
+    parser.add_argument('capture_dir', nargs='?', default=None, 
+                       help='Path to the capture directory (optional, defaults to file picker from cwd)')
+    parser.add_argument('-d', '--capture-dir', dest='capture_dir_flag', default=None,
+                       help='Alternative: Path to the capture directory using -d flag')
     args = parser.parse_args()
     
-    # Use provided directory or default to current working directory
-    capture_dir = args.capture_dir if args.capture_dir else str(Path.cwd())
+    # Use positional argument first, then -d flag, then file picker
+    capture_dir = args.capture_dir or args.capture_dir_flag
+    
+    # If no directory provided, open file picker
+    if capture_dir is None:
+        root = tk.Tk()
+        root.withdraw()  # Hide the root window
+        capture_dir = filedialog.askdirectory(
+            title="Select Capture Directory",
+            initialdir=str(Path.cwd())  # Start from current working directory
+        )
+        root.destroy()
+        
+        if not capture_dir:
+            print("No directory selected. Exiting.")
+            sys.exit(0)
     
     app = ImageSortingTool(capture_dir)
     app.run()

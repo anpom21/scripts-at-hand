@@ -17,7 +17,18 @@ done
 ROOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
 export ARIS_ROOT="$ROOT_DIR"
 
-PYTHON_BIN="${ARIS_PYTHON:-python3}"
+
+PYTHON_BIN=$ROOT_DIR/.venv/bin/python3
+# Check if Python binary exists
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Error: Python binary not found at $PYTHON_BIN"
+  echo "Please set up the virtual environment by running:"
+  echo "  uv venv --python /usr/bin/python3.12 $ROOT_DIR/.venv"
+  echo "  uv sync"
+  exit 1
+fi
+#echo "Using ARIS root: $ROOT_DIR"
+#echo "Using Python binary: $PYTHON_BIN"
 
 # Ensure config exists
 if [[ ! -f "$ROOT_DIR/config.yaml" ]]; then
