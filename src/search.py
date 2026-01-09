@@ -8,15 +8,16 @@ Behavior:
 - `aris search` starts an interactive real-time search.
 - Results update as you type each character.
 - Uses curses for proper terminal handling.
-- Press Enter/TAB to select top result.
+- Press Enter/TAB to select top result and run with --help.
 - Press ESC or Ctrl+C to quit.
 
-Clean, real-time search with proper terminal handling.
+Clean, real-time search with proper terminal handling and automatic help display.
 """
 
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import curses
 from pathlib import Path
@@ -25,6 +26,7 @@ from utils import (
     load_config,
     build_script_index,
     snippet_around,
+    find_entry,
 )
 
 
@@ -115,7 +117,7 @@ def search_curses(stdscr, entries):
         height, width = stdscr.getmaxyx()
         
         # Header
-        header = "ARIS Search - Type to search (ESC/Ctrl+C: quit, Enter/TAB: select top)"
+        header = "ARIS Search - Type to search (ESC/Ctrl+C: quit, Enter/TAB: select top + show help)"
         stdscr.addstr(0, 0, header[:width-1], curses.A_BOLD)
         stdscr.addstr(1, 0, "=" * min(width-1, 70))
         
@@ -281,10 +283,37 @@ def interactive_search(root: Path) -> int:
         selected = curses.wrapper(search_curses, entries)
         
         if selected:
+            # Find the entry
+            entry = find_entry(entries, selected)
+            if not entry:
+                print(f"Error: Script not found: {selected}", file=sys.stderr)
+                return 1
+            
+            # Run the script with --help or -h
             print(f"\n{'=' * 70}")
-            print(f"Selected: {selected}")
-            print(f"Command:  aris {selected}")
+            print(f"Running: aris {selected} --help")
             print(f"{'=' * 70}\n")
+            
+            # Determine the command
+            path = entry.abspath
+            if path.lower().endswith(".py"):
+                cmd = [entry.python3, path, "--help"]
+            else:
+                cmd = ["bash", path, "--help"]
+            
+            # Execute in script's execution_path
+            cwd = entry.execution_path if entry.execution_path else str(Path(path).parent)
+            
+            # Try --help first, if it fails try -h
+            try:
+                result = subprocess.run(cmd, cwd=cwd)
+                if result.returncode != 0:
+                    # Try with -h instead
+                    cmd[-1] = "-h"
+                    subprocess.run(cmd, cwd=cwd)
+            except Exception as e:
+                print(f"Error running script: {e}", file=sys.stderr)
+                return 1
         else:
             print("\nSearch cancelled.\n")
         

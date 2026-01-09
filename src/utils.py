@@ -174,6 +174,9 @@ def load_config(root: Path) -> Dict[str, Any]:
 
 def save_config(root: Path, data: Dict[str, Any]) -> None:
     """Persist config.yaml while preserving formatting, comments, and blank lines.
+    
+    Creates a backup at logs/.old_config.yaml before saving. If the new config
+    fails to load, the backup is restored.
 
     Args:
         root: Repository root.
@@ -184,6 +187,18 @@ def save_config(root: Path, data: Dict[str, Any]) -> None:
     """
 
     p = config_path(root)
+    backup_path = root / "logs" / ".old_config.yaml"
+    
+    # Create logs directory if it doesn't exist
+    (root / "logs").mkdir(parents=True, exist_ok=True)
+    
+    # Backup current config before saving (if it exists)
+    if p.exists():
+        import shutil
+        try:
+            shutil.copy2(p, backup_path)
+        except Exception as e:
+            print(f"Warning: Could not create backup: {e}", file=sys.stderr)
     
     # Use ruamel.yaml for round-trip preservation of formatting
     yaml_writer = YAML()
@@ -300,6 +315,289 @@ def save_config(root: Path, data: Dict[str, Any]) -> None:
         
         with p.open("w", encoding="utf-8") as f:
             f.writelines(lines)
+    
+    # Validate that the saved config can be loaded
+    try:
+        # Try to load the config we just saved
+        yaml_parser = YAML()
+        with p.open("r", encoding="utf-8") as f:
+            test_load = yaml_parser.load(f)
+        if test_load is None:
+            raise Exception("Config file is empty or invalid")
+    except Exception as e:
+        # Config is invalid, restore from backup
+        print(f"\n{red_bold('ERROR:')} Saved config.yaml is invalid!", file=sys.stderr)
+        print(f"  {e}", file=sys.stderr)
+        if backup_path.exists():
+            import shutil
+            shutil.copy2(backup_path, p)
+            print(f"  Restored from backup: {backup_path}", file=sys.stderr)
+        sys.exit(2)
+
+
+def revert_config(root: Path) -> bool:
+    """Revert config.yaml to the backup version.
+
+    Args:
+        root: Repository root.
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    
+    p = config_path(root)
+    backup_path = root / "logs" / ".old_config.yaml"
+    
+    if not backup_path.exists():
+        print("Error: No backup config found at logs/.old_config.yaml", file=sys.stderr)
+        return False
+    
+    # Backup the current config (in case revert was a mistake)
+    revert_backup = root / "logs" / ".pre_revert_config.yaml"
+    if p.exists():
+        import shutil
+        try:
+            shutil.copy2(p, revert_backup)
+        except Exception as e:
+            print(f"Warning: Could not create pre-revert backup: {e}", file=sys.stderr)
+    
+    # Restore from backup
+    import shutil
+    try:
+        shutil.copy2(backup_path, p)
+        print("Config reverted successfully!")
+        print(f"  Restored from: {backup_path}")
+        print(f"  Current config backed up to: {revert_backup}")
+        return True
+    except Exception as e:
+        print(f"Error: Could not revert config: {e}", file=sys.stderr)
+        return False
+
+
+def add_script_to_config(root: Path, script_path: Path) -> bool:
+    """Add a new script to the local scripts directory and config.
+
+    Args:
+        root: ARIS CLI repository root.
+        script_path: Path to the script file to add (can be relative or absolute).
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    
+    # Resolve script path
+    if not script_path.is_absolute():
+        script_path = Path.cwd() / script_path
+    
+    if not script_path.exists():
+        print(f"Error: Script not found: {script_path}", file=sys.stderr)
+        return False
+    
+    if not script_path.is_file():
+        print(f"Error: Not a file: {script_path}", file=sys.stderr)
+        return False
+    
+    # Check if it's a Python or shell script
+    if script_path.suffix.lower() not in {".py", ".sh"}:
+        print(f"Error: Script must be a .py or .sh file, got: {script_path.suffix}", file=sys.stderr)
+        return False
+    
+    # Create scripts directory if it doesn't exist
+    scripts_dir = root / SCRIPTS_DIRNAME
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine destination path - keep the filename
+    dest_path = scripts_dir / script_path.name
+    
+    # Check if file already exists
+    if dest_path.exists():
+        # Check if content is identical
+        dest_hash = compute_script_hash(dest_path)
+        src_hash = compute_script_hash(script_path)
+        if dest_hash == src_hash:
+            print(f"Script already exists with identical content: {dest_path.name}")
+            return True
+        else:
+            print(f"Error: A different script with this name already exists: {dest_path.name}", file=sys.stderr)
+            return False
+    
+    # Copy the script
+    import shutil
+    try:
+        shutil.copy2(script_path, dest_path)
+        set_executable(dest_path)
+        print(f"Added script: {dest_path.name}")
+        print(f"  Source: {script_path}")
+        print(f"  Destination: {dest_path}")
+    except Exception as e:
+        print(f"Error copying script: {e}", file=sys.stderr)
+        return False
+    
+    # Now update config to include the new script
+    # Load current config
+    cfg = load_config(root)
+    
+    # Build script index
+    entries = build_script_index(root, cfg)
+    
+    # Update config with all scripts (including the new one)
+    cfg = update_scripts_section(cfg, entries)
+    
+    # Save config
+    save_config(root, cfg)
+    
+    # Find the new script entry
+    script_name = normalize_script_name(script_path.name)
+    for entry in entries:
+        if entry.abspath == str(dest_path):
+            script_name = entry.name
+            break
+    
+    print(f"\nScript added successfully!")
+    print(f"Run with: aris {script_name}")
+    
+    return True
+
+
+def add_repository_to_config(root: Path, repo_path: Path) -> bool:
+    """Add a git repository to config.yaml.
+
+    Args:
+        root: ARIS CLI repository root.
+        repo_path: Path to the git repository directory.
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    
+    # Resolve repository path
+    if not repo_path.is_absolute():
+        repo_path = Path.cwd() / repo_path
+    
+    if not repo_path.exists():
+        print(f"Error: Repository not found: {repo_path}", file=sys.stderr)
+        return False
+    
+    if not repo_path.is_dir():
+        print(f"Error: Not a directory: {repo_path}", file=sys.stderr)
+        return False
+    
+    # Check if it's a git repository
+    git_dir = repo_path / ".git"
+    if not git_dir.exists():
+        print(f"Error: Not a git repository (no .git folder found): {repo_path}", file=sys.stderr)
+        return False
+    
+    # Get repository name from directory name
+    repo_name = repo_path.name
+    
+    # Look for python3 in .venv/bin/
+    venv_python = repo_path / ".venv" / "bin" / "python3"
+    if venv_python.exists():
+        python3_path = str(venv_python)
+        print(f"Found Python environment: {python3_path}")
+    else:
+        # Fall back to system python3
+        python3_path = _default_system_python3()
+        print(f"No .venv found, using system Python: {python3_path}")
+    
+    # Find available scripts in repository root
+    available_scripts = []
+    for item in repo_path.iterdir():
+        if item.is_file() and item.suffix.lower() in {".py", ".sh"}:
+            available_scripts.append(item.name)
+    
+    if not available_scripts:
+        print(f"Warning: No Python or shell scripts found in repository root: {repo_path}")
+        print("You can add scripts manually to config.yaml later.")
+    
+    # Load config
+    cfg = load_config(root)
+    
+    # Check if repository already exists
+    existing_repos = cfg.get("repositories", []) or []
+    for repo in existing_repos:
+        if repo.get("path") == str(repo_path):
+            print(f"Repository already exists in config: {repo.get('name')}")
+            return True
+        if repo.get("name") == repo_name:
+            print(f"Error: A repository with name '{repo_name}' already exists", file=sys.stderr)
+            return False
+    
+    # If scripts are available, ask user which to include
+    selected_scripts = []
+    if available_scripts:
+        try:
+            import inquirer
+            
+            questions = [
+                inquirer.Checkbox(
+                    'scripts',
+                    message=f"Select scripts to add from {repo_name} (use space to select, enter to confirm)",
+                    choices=available_scripts,
+                    default=available_scripts,  # All selected by default
+                ),
+            ]
+            
+            answers = inquirer.prompt(questions)
+            if answers and answers['scripts']:
+                selected_scripts = answers['scripts']
+                print(f"\nSelected {len(selected_scripts)} script(s): {', '.join(selected_scripts)}")
+            else:
+                print("\nNo scripts selected.")
+        except Exception as e:
+            # Fallback to old method if inquirer fails
+            print(f"\nAvailable scripts in {repo_name}:")
+            for i, script in enumerate(available_scripts, 1):
+                print(f"  {i}. {script}")
+            
+            print("\nEnter script numbers to add (comma-separated), 'all' for all, or press Enter to skip:")
+            try:
+                user_input = input("> ").strip()
+                
+                if user_input.lower() == "all":
+                    selected_scripts = available_scripts
+                elif user_input:
+                    # Parse comma-separated numbers
+                    indices = [int(x.strip()) - 1 for x in user_input.split(",")]
+                    selected_scripts = [available_scripts[i] for i in indices if 0 <= i < len(available_scripts)]
+                
+                if selected_scripts:
+                    print(f"\nSelected scripts: {', '.join(selected_scripts)}")
+            except (ValueError, IndexError, EOFError):
+                print("Invalid input, skipping script selection.")
+                selected_scripts = []
+    
+    # Add repository to config
+    new_repo = {
+        "name": repo_name,
+        "path": str(repo_path),
+        "python3": python3_path,
+        "scripts": selected_scripts,
+    }
+    
+    if "repositories" not in cfg:
+        cfg["repositories"] = []
+    cfg["repositories"].append(new_repo)
+    
+    # Save config
+    save_config(root, cfg)
+    
+    print(f"\nRepository added successfully!")
+    print(f"  Name: {repo_name}")
+    print(f"  Path: {repo_path}")
+    print(f"  Python: {python3_path}")
+    if selected_scripts:
+        print(f"  Scripts: {', '.join(selected_scripts)}")
+    
+    # Refresh to update script index
+    print("\nRefreshing script index...")
+    cfg = load_config(root)
+    entries = build_script_index(root, cfg)
+    cfg = update_scripts_section(cfg, entries)
+    save_config(root, cfg)
+    
+    return True
 
 
 # ----------------------------- DISCOVERY -----------------------------------

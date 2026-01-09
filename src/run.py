@@ -144,9 +144,12 @@ Example:
 
 Options:
   search              Interactive search for scripts
+  --add, -a <path>    Add a script (.py/.sh) or git repository (with .git folder)
+  --open, -o          Open repository in VS Code and show repo path
   --list              List all available scripts
   --config, -c        Open config.yaml in default editor
   --refresh           Refresh script index and show changes
+  --revert            Revert config.yaml to previous backup and refresh
   --reset-config      Reset per-script config (python3, execution_path, name, hash_id, source) but keep shortcuts
   --help, -h          Show this help message"""
 

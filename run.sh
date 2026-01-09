@@ -43,8 +43,8 @@ fi
 
 # If no arguments are given run list, refresh, help
 if [[ $# -eq 0 ]]; then
-  "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
-  echo
+  # "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
+  # echo
   "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" -h
   exit 0
 fi
@@ -54,6 +54,26 @@ SUBCMD="$1"
 
 # Handle flags first
 case "$SUBCMD" in
+  --add|-a)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/add.py" --root "$ROOT_DIR" "$@"
+    exit 0
+    ;;
+  --revert)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/revert.py" --root "$ROOT_DIR" "$@"
+    exit 0
+    ;;
+  --open|-o)
+    echo "Repository location: $ROOT_DIR"
+    if command -v code &> /dev/null; then
+      echo "Opening in VS Code..."
+      code "$ROOT_DIR"
+    else
+      echo "VS Code (code) not found in PATH"
+    fi
+    exit 0
+    ;;
   --config|-c)
     CONFIG_PATH="$ROOT_DIR/config.yaml"
     echo "Opening config: $CONFIG_PATH"
