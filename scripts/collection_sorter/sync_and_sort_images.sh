@@ -110,7 +110,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 1: Running dry run sync...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 scripts/sync_image_files.py \
+python3 sync_image_files.py \
     --machine "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --begin-date "$BEGIN_DATE" \
@@ -138,7 +138,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 2: Running actual sync...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 scripts/sync_image_files.py \
+python3 sync_image_files.py \
     --machine "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --begin-date "$BEGIN_DATE" \
@@ -152,7 +152,7 @@ echo -e "${BOLD_GREEN}Step 3: Building inference records...${RESET}"
 echo "----------------------------------------"
 CSV_OUT="$CAPTURE_DIR/bulk_download.csv"
 echo -e "${DARK_GREY}"
-python3 scripts/build_inference_records.py \
+python3 build_inference_records.py \
     --unit "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --csv-out "$CSV_OUT"

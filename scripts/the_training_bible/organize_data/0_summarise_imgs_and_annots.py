@@ -9,6 +9,7 @@ from datetime import datetime
 
 IMG_RE = re.compile(r'^img_(.+)\.png$', re.IGNORECASE)
 ANN_RE = re.compile(r'^annot_(.+)\.json$', re.IGNORECASE)
+TIMESTAMP_RE = re.compile(r'(\d{4}-\d{2}-\d{2})T[\d-]+', re.IGNORECASE)
 
 def extract_key(filename: str, kind: str):
     name = Path(filename).name
@@ -38,6 +39,8 @@ def scan_aggregate_by_category(root: Path):
         'annot_keys': set(),
         'image_key_counts': Counter(),
         'annot_key_counts': Counter(),
+        'earliest_date': None,
+        'latest_date': None,
     }
 
     root = root.resolve()
@@ -65,6 +68,15 @@ def scan_aggregate_by_category(root: Path):
                 overall['image_count'] += 1
                 overall['image_keys'].add(key)
                 overall['image_key_counts'][key] += 1
+                
+                # Extract and track timestamp
+                timestamp_match = TIMESTAMP_RE.search(name)
+                if timestamp_match:
+                    date_str = timestamp_match.group(1)
+                    if overall['earliest_date'] is None or date_str < overall['earliest_date']:
+                        overall['earliest_date'] = date_str
+                    if overall['latest_date'] is None or date_str > overall['latest_date']:
+                        overall['latest_date'] = date_str
             continue
 
         if is_annot:
@@ -89,7 +101,14 @@ def print_aggregate_report(root: Path, per_cat_name, overall):
 
     print(f"=== Aggregated Dataset Pairing by Category Name ===")
     print(f"Date: {today_str}")
-    print(f"Root: {root}\n")
+    print(f"Root: {root}")
+    
+    # Display earliest and latest image dates
+    if overall.get('earliest_date'):
+        print(f"Earliest image: {overall['earliest_date']}")
+    if overall.get('latest_date'):
+        print(f"Latest image: {overall['latest_date']}")
+    print()
 
     # Prepare rows
     headers = [
