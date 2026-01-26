@@ -14,15 +14,17 @@ Examples:
   => key = "gallant-stag_2025-10-15T10-03-23-644"
 
 Usage examples:
-  python split_to_val.py /path/to/collection --count 50 --seed 42
-  python split_to_val.py /path/to/collection --counts wood=20 --counts metal=5
-  python split_to_val.py /path/to/collection --counts-file counts.json
-  python split_to_val.py /path/to/collection --count 5 --dry-run
+  python split_to_val.py /path/to/collection --count 50 --seed 42 --run
+  python split_to_val.py /path/to/collection --counts wood=20 --counts metal=5 --run
+  python split_to_val.py /path/to/collection --counts-file counts.json --run
+  python split_to_val.py /path/to/collection --count 5  # dry-run by default
+  python split_to_val.py /path/to/collection --percent 20 --run  # move 20% of images per folder
   # Custom prefixes:
-  python split_to_val.py /path/to/collection --img-prefix img_ --annot-prefix annot_
+  python split_to_val.py /path/to/collection --img-prefix img_ --annot-prefix annot_ --run
 
 Notes:
-- Files are MOVED (not copied). Use --dry-run to preview.
+- Dry-run is the default mode (preview only). Use --run to actually move files.
+- Files are MOVED (not copied).
 - Only pairs whose normalized keys match are eligible.
 - If requested count > available pairs, it moves all available pairs for that category.
 """
@@ -155,7 +157,19 @@ def move_pair_by_key(
         shutil.move(str(src_img), str(dst_img))
         shutil.move(str(src_jsn), str(dst_jsn))
 
-def resolve_counts(categories: List[Path], default_count: int, overrides: Dict[str, int], file_counts: Dict[str, int]) -> Dict[str, int]:
+def resolve_counts(
+    categories: List[Path],
+    default_count: int,
+    overrides: Dict[str, int],
+    file_counts: Dict[str, int],
+    percent: float,
+    images_dir_name: str,
+    annots_dir_name: str,
+    img_ext: str,
+    ann_ext: str,
+    img_prefixes: List[str],
+    annot_prefixes: List[str],
+) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for cat_path in categories:
         cat = cat_path.name
@@ -163,6 +177,17 @@ def resolve_counts(categories: List[Path], default_count: int, overrides: Dict[s
             counts[cat] = file_counts[cat]
         elif cat in overrides:
             counts[cat] = overrides[cat]
+        elif percent > 0:
+            # Calculate count based on percentage of available pairs
+            images_dir = cat_path / images_dir_name
+            annots_dir = cat_path / annots_dir_name
+            if images_dir.exists() and annots_dir.exists():
+                img_keys_map, _ = build_key_maps(images_dir, img_ext, img_prefixes)
+                ann_keys_map, _ = build_key_maps(annots_dir, ann_ext, annot_prefixes)
+                paired = set(img_keys_map.keys()) & set(ann_keys_map.keys())
+                counts[cat] = max(1, int(len(paired) * percent / 100.0))
+            else:
+                counts[cat] = 0
         else:
             counts[cat] = max(0, default_count)
     return counts
@@ -170,13 +195,14 @@ def resolve_counts(categories: List[Path], default_count: int, overrides: Dict[s
 def main():
     parser = argparse.ArgumentParser(description="Move random paired image/annot files into a sibling 'val' directory, pairing by normalized filename keys.")
     parser.add_argument("collection", type=str, help="Path to the collection directory (containing category folders).")
-    parser.add_argument("--count", type=int, default=0, help="Default number of pairs to move per category (overridden by --counts/--counts-file).")
+    parser.add_argument("--count", type=int, default=0, help="Default number of pairs to move per category (overridden by --counts/--counts-file/--percent).")
+    parser.add_argument("--percent", type=float, default=0.0, help="Percentage of pairs to move per category (e.g., 20 for 20%%). Overridden by --counts/--counts-file.")
     parser.add_argument("--counts", action="append", default=[],
                         help="Per-category override like 'wood=20'. May be provided multiple times.")
     parser.add_argument("--counts-file", type=str, default=None,
                         help="Path to a JSON file with a mapping of { category: count }.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility.")
-    parser.add_argument("--dry-run", action="store_true", help="Print what would be moved without making changes.")
+    parser.add_argument("--run", action="store_true", help="Actually move files. Without this flag, only a dry-run preview is shown.")
     parser.add_argument("--img-ext", type=str, default=IMG_EXT_DEFAULT, help="Image file extension (default: .png).")
     parser.add_argument("--ann-ext", type=str, default=ANN_EXT_DEFAULT, help="Annot file extension (default: .json).")
     parser.add_argument("--img-prefix", action="append", default=["img_"],
@@ -193,6 +219,14 @@ def main():
     parent_dir = collection_dir.parent
     val_dir = parent_dir / "val"
 
+    # Dry-run is default; only run if --run is specified
+    dry_run = not args.run
+
+    # Validate percent if provided
+    if args.percent < 0 or args.percent > 100:
+        print(f"ERROR: --percent must be between 0 and 100, got {args.percent}", file=sys.stderr)
+        sys.exit(2)
+
     if args.seed is not None:
         random.seed(args.seed)
 
@@ -200,7 +234,7 @@ def main():
         overrides = parse_counts_arg(args.counts)
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(2)
+        sys.exit(3)
 
     file_counts: Dict[str, int] = {}
     if args.counts_file:
@@ -208,22 +242,37 @@ def main():
             file_counts = load_counts_file(Path(args.counts_file))
         except Exception as e:
             print(f"ERROR reading --counts-file: {e}", file=sys.stderr)
-            sys.exit(3)
+            sys.exit(4)
 
     categories = discover_categories(collection_dir)
     if not categories:
         print(f"WARNING: No category directories found in {collection_dir}. Nothing to do.")
         sys.exit(0)
 
-    counts_map = resolve_counts(categories, args.count, overrides, file_counts)
+    counts_map = resolve_counts(
+        categories,
+        args.count,
+        overrides,
+        file_counts,
+        args.percent,
+        "images",
+        "annots",
+        args.img_ext,
+        args.ann_ext,
+        args.img_prefix,
+        args.annot_prefix,
+    )
 
     print(f"Collection: {collection_dir}")
     print(f"Target val dir: {val_dir}")
-    if args.dry_run:
-        print("[DRY-RUN] No changes will be made.")
+    if dry_run:
+        print("[DRY-RUN] No changes will be made. Use --run to actually move files.")
+    else:
+        print("[RUN MODE] Files will be moved.")
 
     grand_total_requested = 0
     grand_total_moved = 0
+    moved_per_category: Dict[str, int] = {}
 
     for cat_path in sorted(categories, key=lambda p: p.name):
         cat = cat_path.name
@@ -278,20 +327,29 @@ def main():
                     dst_ann,
                     args.img_ext,
                     args.ann_ext,
-                    dry_run=args.dry_run,
+                    dry_run=dry_run,
                 )
                 moved += 1
             except Exception as e:
                 print(f"[ERROR] Failed to move pair for key '{key}' in category '{cat}': {e}", file=sys.stderr)
 
         grand_total_moved += moved
+        moved_per_category[cat] = moved
         print(f"[DONE] {cat}: moved {moved} pair(s).")
 
     print("\n=== Summary ===")
     print(f"Requested total pairs: {grand_total_requested}")
     print(f"Moved total pairs:     {grand_total_moved}")
-    if args.dry_run:
-        print("[DRY-RUN] No files were moved.")
+    if moved_per_category:
+        print("\nPairs moved per category:")
+        for cat in sorted(moved_per_category.keys()):
+            count = moved_per_category[cat]
+            if count > 0:
+                print(f"  {cat}: {count}")
+    if dry_run:
+        print("\n[DRY-RUN] No files were moved. Use --run to actually move files.")
+    else:
+        print("\n[RUN MODE] Files were actually moved.")
 
 if __name__ == "__main__":
     main()
