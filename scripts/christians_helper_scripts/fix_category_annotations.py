@@ -34,19 +34,50 @@ BOLD = "\033[1m"
 
 def find_json_files(collections_root: Path) -> List[Path]:
     """
-    Find all JSON files under .../<collection>/<category>/annots/*.json
+    Find all JSON files under:
+    - .../<collection>/<category>/annots/*.json
+    - .../<collection>/<category>/*.json (root of category folder)
+    Automatically detects whether collections_root is a collection or contains captures.
     """
-    #return sorted(collections_root.glob("*/*/annots/*.json")) # For when a complete collection is given: e.g. Collections_mineral_wool
-    return sorted(collections_root.glob("*/annots/*.json")) # For when a specific collection is given, e.g. 2025-10-15_aris-dc_gallant-stag  
+    files_set = set()
+    
+    # Try collection-level pattern first (when run from Collections_wood)
+    # Check both annots/ folder and root of category folder
+    files_set.update(collections_root.glob("*/*/annots/*.json"))
+    files_set.update(collections_root.glob("*/*/*.json"))
+    
+    # If no files found, try capture-level pattern (when run from 2025-10-15_aris-dc_gallant-stag)
+    # Check both annots/ folder and root of category folder
+    if not files_set:
+        files_set.update(collections_root.glob("*/annots/*.json"))
+        files_set.update(collections_root.glob("*/*.json"))
+    
+    # Filter out files that are in images/ or other non-annotation directories
+    # Keep only files that are either in annots/ or directly in category folder
+    filtered_files = []
+    for f in files_set:
+        # Exclude files from images/ or other known non-annotation directories
+        if "images" not in f.parts:
+            filtered_files.append(f)
+    
+    return sorted(filtered_files)  
 
 
 def expected_category_for(json_path: Path) -> str:
     """
-    Given a path .../<collection>/<category>/annots/file.json,
+    Given a path:
+    - .../<collection>/<category>/annots/file.json OR
+    - .../<collection>/<category>/file.json
     return <category>.
     """
-    # json_path.parent is annots/, its parent is <category>
-    category_dir = json_path.parent.parent.name
+    # Check if file is in annots/ subdirectory
+    if json_path.parent.name == "annots":
+        # json_path.parent is annots/, its parent is <category>
+        category_dir = json_path.parent.parent.name
+    else:
+        # json_path is directly in <category> folder
+        category_dir = json_path.parent.name
+    
     return category_dir
 
 
