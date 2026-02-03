@@ -497,15 +497,29 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
         python3_path = str(venv_python)
         print(f"Found Python environment: {python3_path}")
     else:
+        # Search for any folder with "*venv*" in name
+        venv_dirs = [d for d in repo_path.iterdir() if d.is_dir() and "venv" in d.name.lower()]
+        if venv_dirs:
+            for venv_dir in venv_dirs:
+                candidate = venv_dir / "bin" / "python3"
+                if candidate.exists():
+                    python3_path = str(candidate)
+                    print(f"Found Python environment: {python3_path}")
+                    break
         # Fall back to system python3
         python3_path = _default_system_python3()
         print(f"No .venv found, using system Python: {python3_path}")
     
-    # Find available scripts in repository root
+    # Find available scripts in repository root and subdirectories (excluding venv)
     available_scripts = []
-    for item in repo_path.iterdir():
+    for item in repo_path.rglob("*"):
+        if repo_path / ".venv" in item.parents or "__init__.py" in item.parts:
+            continue
         if item.is_file() and item.suffix.lower() in {".py", ".sh"}:
-            available_scripts.append(item.name)
+            available_scripts.append(item.relative_to(repo_path))
+
+    # Sort scripts by fewest "/" in their relative path
+    available_scripts.sort(key=lambda x: (len(x.parts), str(x)))
     
     if not available_scripts:
         print(f"Warning: No Python or shell scripts found in repository root: {repo_path}")
@@ -513,13 +527,17 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
     
     # Load config
     cfg = load_config(root)
-    
+    current_scripts = []
     # Check if repository already exists
-    existing_repos = cfg.get("repositories", []) or []
-    for repo in existing_repos:
-        if repo.get("path") == str(repo_path):
-            print(f"Repository already exists in config: {repo.get('name')}")
-            return True
+    existing_repos = cfg["repositories"] or []
+    existing_repo_cfg = None
+    for i, repo in enumerate(existing_repos):
+        if repo["path"] == str(repo_path):
+            print(f"Repository already exists in config: {repo.get('name')}. Extracting scripts...")
+            current_scripts = [Path(s) for s in repo["scripts"] or []]
+            existing_repo_idx = i
+            print("Existing name:", existing_repo_idx)
+            break
         if repo.get("name") == repo_name:
             print(f"Error: A repository with name '{repo_name}' already exists", file=sys.stderr)
             return False
@@ -535,17 +553,22 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
                     'scripts',
                     message=f"Select scripts to add from {repo_name} (use space to select, enter to confirm)",
                     choices=available_scripts,
-                    default=available_scripts,  # All selected by default
+                    default=current_scripts,
                 ),
             ]
             
             answers = inquirer.prompt(questions)
             if answers and answers['scripts']:
-                selected_scripts = answers['scripts']
+                selected_scripts = [str(ans) for ans in answers['scripts']]
+                
                 print(f"\nSelected {len(selected_scripts)} script(s): {', '.join(selected_scripts)}")
             else:
                 print("\nNo scripts selected.")
+                # Check if Ctrl+C was used to abort
+    
+                
         except Exception as e:
+            print(f"Error during script selection: {e}", file=sys.stderr)
             # Fallback to old method if inquirer fails
             print(f"\nAvailable scripts in {repo_name}:")
             for i, script in enumerate(available_scripts, 1):
@@ -568,28 +591,39 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
                 print("Invalid input, skipping script selection.")
                 selected_scripts = []
     
-    # Add repository to config
-    new_repo = {
-        "name": repo_name,
-        "path": str(repo_path),
-        "python3": python3_path,
-        "scripts": selected_scripts,
-    }
+    if existing_repo_idx is not None:
+        if not selected_scripts:
+            print("No new scripts selected, repository addition aborted.")
+            return False
+        cfg["repositories"][existing_repo_idx]["scripts"] = [str(s) for s in selected_scripts]
+        #print(cfg)
+        
+        save_config(root, cfg)
+        print(f"Updated repository '{repo_name}' with {len(selected_scripts)} scripts.")
+    else:
     
-    if "repositories" not in cfg:
-        cfg["repositories"] = []
-    cfg["repositories"].append(new_repo)
+        # Add repository to config
+        new_repo = {
+            "name": repo_name,
+            "path": str(repo_path),
+            "python3": python3_path,
+            "scripts": selected_scripts,
+        }
+        
+        if "repositories" not in cfg:
+            cfg["repositories"] = []
+        cfg["repositories"].append(new_repo)
+        
+        # Save config
+        save_config(root, cfg)
     
-    # Save config
-    save_config(root, cfg)
-    
-    print(f"\nRepository added successfully!")
-    print(f"  Name: {repo_name}")
-    print(f"  Path: {repo_path}")
-    print(f"  Python: {python3_path}")
-    if selected_scripts:
-        print(f"  Scripts: {', '.join(selected_scripts)}")
-    
+        print(f"\nRepository added successfully!")
+        print(f"  Name: {repo_name}")
+        print(f"  Path: {repo_path}")
+        print(f"  Python: {python3_path}")
+        if selected_scripts:
+            print(f"  Scripts: {', '.join(selected_scripts)}")
+        
     # Refresh to update script index
     print("\nRefreshing script index...")
     cfg = load_config(root)

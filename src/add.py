@@ -16,7 +16,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from utils import add_script_to_config, add_repository_to_config
+from utils import add_script_to_config, add_repository_to_config, load_config
 
 
 def main() -> None:
@@ -63,9 +63,8 @@ Examples:
     if not target_path.is_absolute():
         target_path = Path.cwd() / target_path
     
-    if not target_path.exists():
-        print(f"Error: Path not found: {target_path}", file=sys.stderr)
-        sys.exit(1)
+
+    
     
     # Determine if it's a file or directory
     if target_path.is_file():
@@ -75,17 +74,26 @@ Examples:
         else:
             print(f"Error: File must be a .py or .sh script", file=sys.stderr)
             success = False
-    elif target_path.is_dir():
+    else:
         # Check if it's a git repository
         git_dir = target_path / ".git"
         if git_dir.exists():
             success = add_repository_to_config(root, target_path)
         else:
-            print(f"Error: Directory is not a git repository (no .git folder)", file=sys.stderr)
+            cfg = load_config(root)
             success = False
-    else:
-        print(f"Error: Path is neither a file nor a directory: {target_path}", file=sys.stderr)
-        success = False
+            for repo in cfg["repositories"] or []:
+                if repo["name"] == str(target_path.name):
+                    repo_path = Path(repo["path"])
+                    print(f"Defaulting to existing repository from config: {repo["name"]}")
+                    success = add_repository_to_config(root, repo_path)
+                     
+            if target_path.is_dir() and not success:
+                print(f"Error: Directory is not a git repository (no .git folder)", file=sys.stderr)
+            elif not success:
+                print(f"Error: Path is neither a file nor a directory: {target_path}", file=sys.stderr)
+
+
     
     sys.exit(0 if success else 1)
 
