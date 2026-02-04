@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
+
+try:
+	import inquirer
+except ImportError:
+	print("Error: inquirer package is required. Install it with: pip install inquirer")
+	sys.exit(1)
 
 
 def prompt_overwrite(path: Path) -> bool:
@@ -73,15 +80,20 @@ def parse_args() -> argparse.Namespace:
 		)
 	)
 	parser.add_argument(
-		"output",
+		"--output",
 		type=Path,
 		help="Directory that will contain the merged folders.",
 	)
 	parser.add_argument(
-		"sources",
+		"--sources",
 		nargs="+",
 		type=Path,
 		help="One or more source folders to move into the output directory.",
+	)
+	parser.add_argument(
+		"--source",
+		type=Path,
+		help="Path to the folder where the source folders are located.",
 	)
 	parser.add_argument(
 		"--overwrite",
@@ -100,8 +112,50 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
 	args = parse_args()
+	
+	# Handle --source argument with inquirer
+	if args.source:
+		if not args.source.exists():
+			raise FileNotFoundError(f"Source folder not found: {args.source}")
+		if not args.source.is_dir():
+			raise NotADirectoryError(f"Source path is not a folder: {args.source}")
+		
+		# Get all subdirectories
+		subdirs = [d for d in args.source.iterdir() if d.is_dir()]
+		
+		if not subdirs:
+			print(f"No subdirectories found in {args.source}")
+			sys.exit(1)
+		
+		# Sort subdirectories by name for consistent display
+		subdirs.sort(key=lambda x: x.name)
+		
+		# Create inquirer checkbox with all subfolders selected by default
+		questions = [
+			inquirer.Checkbox(
+				"selected_folders",
+				message="Select folders to merge (all selected by default)",
+				choices=[(str(d.name), d) for d in subdirs],
+				default=[d for d in subdirs],  # All selected by default
+			)
+		]
+		
+		answers = inquirer.prompt(questions)
+		
+		if not answers or not answers["selected_folders"]:
+			print("No folders selected. Exiting.")
+			sys.exit(0)
+		
+		source_dirs = answers["selected_folders"]
+	else:
+		# Use --sources argument
+		if not args.sources:
+			print("Error: Either --source or --sources must be provided")
+			sys.exit(1)
+		source_dirs = args.sources
+	
 	merge_folders(
-		args.sources,
+		source_dirs,
 		args.output,
 		args.overwrite,
 		args.skip_duplicates,
