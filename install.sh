@@ -24,21 +24,41 @@ uv sync --active
 
 echo "Dependencies installed and virtual environment set up."
 
-echo "Adding ARIS command alias to ~/.bashrc..."
-# Add alias to bashrc if not already present
-if ! grep -q 'alias aris=' ~/.bashrc; then
-    # Add alias and completion sourcing
-  echo "" >> ~/.bashrc
-  echo "#>>> aris-cli initialize >>>" >> ~/.bashrc
-  echo "alias aris='$(pwd)/run.sh'" >> ~/.bashrc
-  echo "source <(aris completion bash)" >> ~/.bashrc
-  echo "#<<< aris-cli initialize <<<" >> ~/.bashrc
-  echo "" >> ~/.bashrc
+echo "Running initial refresh to discover scripts..."
+"$PWD/.venv/bin/python3" "$PWD/src/refresh.py" --root "$PWD"
 
-    # Source the updated bashrc
-  echo "Added alias to ~/.bashrc." 
+echo "Generating completion files..."
+"$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-stub
+"$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-cache
+
+echo "Adding ARIS command alias to shell rc file..."
+
+# Detect shell and set appropriate rc file and stub path
+if [ -n "${ZSH_VERSION:-}" ] || [[ "$SHELL" == *"zsh"* ]]; then
+  SHELL_RC="$HOME/.zshrc"
+  STUB_PATH="$(pwd)/logs/.completion_stub.zsh"
+  SHELL_NAME="zsh"
 else
-  echo "Alias already exists in ~/.bashrc."
+  SHELL_RC="$HOME/.bashrc"
+  STUB_PATH="$(pwd)/logs/.completion_stub.bash"
+  SHELL_NAME="bash"
+fi
+
+echo "Detected $SHELL_NAME shell, will update $SHELL_RC"
+
+# Add alias to rc file if not already present
+if ! grep -q 'alias aris=' "$SHELL_RC"; then
+    # Add alias and completion sourcing (stub file — zero Python at startup)
+  echo "" >> "$SHELL_RC"
+  echo "#>>> aris-cli initialize >>>" >> "$SHELL_RC"
+  echo "alias aris='$(pwd)/run.sh'" >> "$SHELL_RC"
+  echo "source '$STUB_PATH'" >> "$SHELL_RC"
+  echo "#<<< aris-cli initialize <<<" >> "$SHELL_RC"
+  echo "" >> "$SHELL_RC"
+
+  echo "Added alias to $SHELL_RC" 
+else
+  echo "Alias already exists in $SHELL_RC"
 fi
 deactivate
 source ~/.bashrc

@@ -106,12 +106,16 @@ case "$SUBCMD" in
   --reset-config)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose --reset-config "$@"
+    # Regenerate completion cache
+    "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" --generate-cache 2>/dev/null
     echo "Resetting configuration completed."
     exit 0
     ;;
   --refresh)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
+    # Regenerate completion cache
+    "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" --generate-cache 2>/dev/null
     echo "Refresh completed."
     exit 0
     ;;
@@ -129,7 +133,14 @@ case "$SUBCMD" in
     "$PYTHON_BIN" "$ROOT_DIR/src/search.py" --root "$ROOT_DIR" "$@"
     ;;
   completion)
-    "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" "$@"
+    # Fast path: if stub file exists and user wants bash/zsh output, cat it directly
+    if [[ "${1:-}" == "bash" && -f "$ROOT_DIR/logs/.completion_stub.bash" ]]; then
+      cat "$ROOT_DIR/logs/.completion_stub.bash"
+    elif [[ "${1:-}" == "zsh" && -f "$ROOT_DIR/logs/.completion_stub.zsh" ]]; then
+      cat "$ROOT_DIR/logs/.completion_stub.zsh"
+    else
+      "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" "$@"
+    fi
     ;;
   *)
     # Treat as a script name.
