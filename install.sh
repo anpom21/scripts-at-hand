@@ -27,40 +27,40 @@ echo "Dependencies installed and virtual environment set up."
 echo "Running initial refresh to discover scripts..."
 "$PWD/.venv/bin/python3" "$PWD/src/refresh.py" --root "$PWD"
 
-echo "Generating completion files..."
-"$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-stub
-"$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-cache
+echo "Adding ARIS to shell rc file..."
 
-echo "Adding ARIS command alias to shell rc file..."
-
-# Detect shell and set appropriate rc file and stub path
+# Detect shell and set appropriate rc file
 if [ -n "${ZSH_VERSION:-}" ] || [[ "$SHELL" == *"zsh"* ]]; then
   SHELL_RC="$HOME/.zshrc"
-  STUB_PATH="$(pwd)/logs/.completion_stub.zsh"
+  COMPLETE_VAR="zsh_source"
   SHELL_NAME="zsh"
 else
   SHELL_RC="$HOME/.bashrc"
-  STUB_PATH="$(pwd)/logs/.completion_stub.bash"
+  COMPLETE_VAR="bash_source"
   SHELL_NAME="bash"
 fi
 
 echo "Detected $SHELL_NAME shell, will update $SHELL_RC"
 
-# Add alias to rc file if not already present
-if ! grep -q 'alias aris=' "$SHELL_RC"; then
-    # Add alias and completion sourcing (stub file — zero Python at startup)
-  echo "" >> "$SHELL_RC"
-  echo "#>>> aris-cli initialize >>>" >> "$SHELL_RC"
-  echo "alias aris='$(pwd)/run.sh'" >> "$SHELL_RC"
-  echo "source '$STUB_PATH'" >> "$SHELL_RC"
-  echo "#<<< aris-cli initialize <<<" >> "$SHELL_RC"
-  echo "" >> "$SHELL_RC"
+ARIS_VENV_BIN="$(pwd)/.venv/bin"
 
-  echo "Added alias to $SHELL_RC" 
-else
-  echo "Alias already exists in $SHELL_RC"
+# Remove old aris-cli block if present, then add new one
+if grep -q '# >>> aris-cli initialize >>>' "$SHELL_RC" 2>/dev/null; then
+  # Remove everything between the markers (inclusive)
+  sed -i '/# >>> aris-cli initialize >>>/,/# <<< aris-cli initialize <<</d' "$SHELL_RC"
+  echo "Removed old aris-cli block from $SHELL_RC"
 fi
-deactivate
-source ~/.bashrc
+
+if ! grep -q 'aris-cli initialize' "$SHELL_RC"; then
+  echo "" >> "$SHELL_RC"
+  echo "# >>> aris-cli initialize >>>" >> "$SHELL_RC"
+  echo "export PATH=\"$ARIS_VENV_BIN:\$PATH\"" >> "$SHELL_RC"
+  echo "eval \"\$(_ARIS_COMPLETE=${COMPLETE_VAR} aris)\"" >> "$SHELL_RC"
+  echo "# <<< aris-cli initialize <<<" >> "$SHELL_RC"
+  echo "" >> "$SHELL_RC"
+  echo "Added aris-cli to $SHELL_RC"
+else
+  echo "aris-cli block already exists in $SHELL_RC"
+fi
 
 echo "Installation complete. You can now use the 'aris' command."
