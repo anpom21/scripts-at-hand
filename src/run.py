@@ -22,7 +22,7 @@ from utils import load_config, build_script_index, find_entry
 
 
 def list_scripts(root: Path) -> int:
-    """Print available scripts.
+    """Print available scripts grouped by folder/repository.
 
     Args:
         root: Repository root.
@@ -34,27 +34,47 @@ def list_scripts(root: Path) -> int:
     cfg = load_config(root)
     entries = build_script_index(root, cfg)
 
+    # Filter ignored scripts
+    entries = [e for e in entries if not e.ignore]
+
     # Color codes
     GREEN = "\033[0;32m"
     RED = "\033[0;31m"
     DIM = "\033[2m"
+    BOLD = "\033[1m"
     RESET = "\033[0m"
 
     print("Available scripts:\n")
+
+    # Group scripts
+    from collections import defaultdict
+    groups = defaultdict(list)
+    ungrouped = []
     for e in entries:
-        # Script name in green
-        name_colored = f"{GREEN}{e.name}{RESET}"
-        
-        # Shortcut in dim grey if present
-        shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
-        
-        # Source in red brackets if not local
-        src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
-        
-        # Description in dim grey
-        desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
-        
-        print(f"  {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
+        if e.group:
+            groups[e.group].append(e)
+        else:
+            ungrouped.append(e)
+
+    # Print grouped scripts (sorted alphabetically by group name)
+    for group_name in sorted(groups.keys(), key=str.lower):
+        print(f"  {BOLD}[{group_name}]{RESET}")
+        for e in sorted(groups[group_name], key=lambda x: x.name.lower()):
+            name_colored = f"{GREEN}{e.name}{RESET}"
+            shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+            src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
+            desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
+            print(f"    {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
+        print()
+
+    # Print ungrouped scripts
+    if ungrouped:
+        for e in sorted(ungrouped, key=lambda x: x.name.lower()):
+            name_colored = f"{GREEN}{e.name}{RESET}"
+            shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+            src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
+            desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
+            print(f"  {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
 
     return 0
 
