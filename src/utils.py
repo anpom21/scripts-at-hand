@@ -56,6 +56,10 @@ class ScriptEntry:
     shortcut: str = ""
     # Optional list of tags for categorization and search (e.g., ['training', 'data']).
     tags: List[str] = None
+    # If True, the script is hidden from listing, search, and completion.
+    ignore: bool = False
+    # Group name derived from folder structure or repository name.
+    group: str = ""
     
     def __post_init__(self):
         """Initialize tags to empty list if None."""
@@ -513,7 +517,13 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
     # Find available scripts in repository root and subdirectories (excluding venv)
     available_scripts = []
     for item in repo_path.rglob("*"):
-        if repo_path / ".venv" in item.parents or "__init__.py" in item.parts:
+        if "__init__.py" in item.parts:
+            continue
+        # Filter out virtualenvs: any *venv* parent dirs and lib/python paths
+        rel_parts = item.relative_to(repo_path).parts
+        if any("venv" in part.lower() for part in rel_parts[:-1]):
+            continue
+        if "/lib/python" in str(item.relative_to(repo_path)):
             continue
         if item.is_file() and item.suffix.lower() in {".py", ".sh"}:
             available_scripts.append(item.relative_to(repo_path))
@@ -944,7 +954,9 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
         name = normalize_script_name(rel)
         python3 = default_py if _is_python_script(p) else "NAN"
         exec_path = str(p.parent)
-        proposed_entries.append((name, p, python3, "local", rel, extract_description(p), exec_path))
+        rel_parts = Path(rel).parts
+        group = str(Path(rel).parent) if len(rel_parts) > 1 else ""
+        proposed_entries.append((name, p, python3, "local", rel, extract_description(p), exec_path, group))
 
     # 2) Repository scripts
     for repo in cfg.get("repositories", []) or []:
@@ -959,17 +971,17 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
             python3 = rpy if _is_python_script(p) else "NAN"
             # execution_path can be overridden per-repository
             exec_path = rexec
-            proposed_entries.append((name, p, python3, rname, rel, extract_description(p), exec_path))
+            proposed_entries.append((name, p, python3, rname, rel, extract_description(p), exec_path, rname))
 
     # Resolve name collisions
     resolved = []
-    for name, p, python3, source, rel, desc, exec_path in proposed_entries:
-        resolved.append((name, p, python3, source, rel, desc, exec_path))
+    for name, p, python3, source, rel, desc, exec_path, group in proposed_entries:
+        resolved.append((name, p, python3, source, rel, desc, exec_path, group))
 
     # Group by name to detect collisions
     from collections import defaultdict
     name_groups: Dict[str, List[int]] = defaultdict(list)
-    for idx, (name, _, _, _, _, _, _) in enumerate(resolved):
+    for idx, (name, _, _, _, _, _, _, _) in enumerate(resolved):
         name_groups[name].append(idx)
 
     # Resolve collisions
@@ -977,7 +989,7 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
         if len(indices) > 1:
             # Collision detected - need to make names unique
             for idx in indices:
-                _, p, python3, source, relpath, desc, exec_path = resolved[idx]
+                _, p, python3, source, relpath, desc, exec_path, group = resolved[idx]
                 parts = Path(relpath).parts
                 unique_name = name
                 
@@ -986,7 +998,7 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
                     candidate = "_".join(parts[-(depth + 1):])
                     # Check if candidate is unique among all current names
                     is_unique = True
-                    for check_idx, (check_name, _, _, _, _, _, _) in enumerate(resolved):
+                    for check_idx, (check_name, _, _, _, _, _, _, _) in enumerate(resolved):
                         if check_idx != idx and check_name == candidate:
                             is_unique = False
                             break
@@ -994,13 +1006,13 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
                         unique_name = candidate
                         break
                 
-                resolved[idx] = (unique_name, p, python3, source, relpath, desc, exec_path)
+                resolved[idx] = (unique_name, p, python3, source, relpath, desc, exec_path, group)
 
     # Build ScriptEntry objects with hash detection
     entries: List[ScriptEntry] = []
     hash_map: Dict[str, ScriptEntry] = {}
     
-    for name, p, python3, source, relpath, desc, exec_path in resolved:
+    for name, p, python3, source, relpath, desc, exec_path, group in resolved:
         hash_id = compute_script_hash(p)
         
         # Check for hash collision (duplicate content)
@@ -1023,6 +1035,7 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
             description=desc,
             execution_path=exec_path,
             hash_id=hash_id,
+            group=group,
         )
         entries.append(entry)
         
@@ -1050,6 +1063,8 @@ def build_script_index(root: Path, cfg: Dict[str, Any]) -> List[ScriptEntry]:
                     entry.tags = tags
                 else:
                     entry.tags = []
+            if "ignore" in override:
+                entry.ignore = bool(override["ignore"])
 
     return sorted(entries, key=lambda x: x.name.lower())
 
@@ -1074,6 +1089,7 @@ def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> D
             "python3": e.python3,
             "execution_path": e.execution_path,
             "hash_id": e.hash_id,
+            "ignore": e.ignore,
             "source": e.source,
             "shortcut": e.shortcut,
             "tags": e.tags if e.tags else [],

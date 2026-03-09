@@ -88,6 +88,8 @@ def refresh(root: Path, verbose: bool = False) -> int:
                 preserved["shortcut"] = s.get("shortcut")
             if s.get("tags"):
                 preserved["tags"] = s.get("tags")
+            if "ignore" in s:
+                preserved["ignore"] = s.get("ignore")
             minimal_cfg["scripts"].append(preserved)
 
         entries = build_script_index(root, minimal_cfg)

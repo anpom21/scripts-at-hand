@@ -103,26 +103,33 @@ class ArisCLI(click.Group):
     """Click group that resolves config.yaml script names as sub-commands."""
 
     def list_commands(self, ctx):
-        """Static commands + all script names/shortcuts from config."""
+        """Static commands + all script names/shortcuts/groups from config."""
         commands = set(super().list_commands(ctx))
 
         try:
             root = _get_root()
             cfg = load_config(root)
             for e in cfg.get("scripts", []):
+                if e.get("ignore"):
+                    continue
                 name = e.get("name", "")
                 if name:
                     commands.add(name)
                 shortcut = e.get("shortcut", "")
                 if shortcut:
                     commands.add(shortcut)
+            # Add group names for group-based listing
+            entries = build_script_index(root, cfg)
+            for entry in entries:
+                if not entry.ignore and entry.group:
+                    commands.add(entry.group)
         except Exception:
             pass  # Don't break completion if config is unreadable
 
         return sorted(commands, key=str.lower)
 
     def get_command(self, ctx, cmd_name):
-        """Static commands first, then try as script name/shortcut."""
+        """Static commands first, then try as script name/shortcut/group."""
         cmd = super().get_command(ctx, cmd_name)
         if cmd is not None:
             return cmd
@@ -131,9 +138,15 @@ class ArisCLI(click.Group):
             root = _get_root()
             cfg = load_config(root)
             entries = build_script_index(root, cfg)
-            entry = find_entry(entries, cmd_name)
+            active = [e for e in entries if not e.ignore]
+            entry = find_entry(active, cmd_name)
             if entry is not None:
                 return _make_script_command(entry)
+
+            # Try as group name
+            group_entries = [e for e in active if e.group == cmd_name]
+            if group_entries:
+                return _make_group_command(cmd_name, group_entries)
         except Exception:
             pass
 
@@ -173,6 +186,32 @@ def _make_script_command(entry):
     return cmd
 
 
+def _make_group_command(group_name, entries):
+    """Create a Click command that lists scripts in a group."""
+
+    @click.command(
+        name=group_name,
+        help=f"List scripts in group '{group_name}'",
+    )
+    def cmd():
+        GREEN = "\033[0;32m"
+        DIM = "\033[2m"
+        RED = "\033[0;31m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
+        click.echo(f"\n  {BOLD}[{group_name}]{RESET}")
+        for e in sorted(entries, key=lambda x: x.name.lower()):
+            name_colored = f"{GREEN}{e.name}{RESET}"
+            shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if e.shortcut else ""
+            src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
+            desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
+            click.echo(f"    {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
+        click.echo()
+
+    return cmd
+
+
 # ---------------------------------------------------------------------------
 # Main CLI group
 # ---------------------------------------------------------------------------
@@ -185,8 +224,8 @@ def _make_script_command(entry):
 )
 @click.option("--add", "-a", "add_path", type=click.Path(), default=None,
               help="Add a script (.py/.sh) or git repository.")
-@click.option("--open", "-o", "open_repo", is_flag=True,
-              help="Open repository in VS Code.")
+@click.option("--open", "-o", "open_target", is_flag=False, flag_value=".",
+              default=None, help="Open repository or script in editor.")
 @click.option("--config", "-c", "open_config", is_flag=True,
               help="Open config.yaml in default editor.")
 @click.option("--list", "list_scripts_flag", is_flag=True,
@@ -198,7 +237,7 @@ def _make_script_command(entry):
 @click.option("--reset-config", is_flag=True,
               help="Reset per-script config but keep shortcuts.")
 @click.pass_context
-def cli(ctx, add_path, open_repo, open_config, list_scripts_flag,
+def cli(ctx, add_path, open_target, open_config, list_scripts_flag,
         refresh, revert, reset_config):
     """Unified runner for ARIS production scripts.
 
@@ -228,8 +267,8 @@ def cli(ctx, add_path, open_repo, open_config, list_scripts_flag,
         _do_add(root, add_path)
         return
 
-    if open_repo:
-        _do_open(root)
+    if open_target:
+        _do_open(root, open_target)
         return
 
     if open_config:
@@ -296,15 +335,42 @@ def _do_add(root: Path, path_str: str):
     raise SystemExit(0 if success else 1)
 
 
-def _do_open(root: Path):
+def _do_open(root: Path, target: str = "."):
     import shutil
 
-    click.echo(f"Repository location: {root}")
-    if shutil.which("code"):
-        click.echo("Opening in VS Code...")
-        os.execvp("code", ["code", str(root)])
+    if target and target != ".":
+        # Open a specific script by name or shortcut
+        cfg = load_config(root)
+        entries = build_script_index(root, cfg)
+        active = [e for e in entries if not e.ignore]
+        entry = find_entry(active, target)
+        if entry is None:
+            click.echo(f"Error: Script not found: {target}", err=True)
+            raise SystemExit(1)
+
+        script_path = entry.abspath
+        click.echo(f"Opening script: {script_path}")
+        if shutil.which("code"):
+            os.execvp("code", ["code", script_path])
+        elif os.environ.get("EDITOR"):
+            editor = os.environ["EDITOR"]
+            os.execvp(editor, [editor, script_path])
+        elif shutil.which("xdg-open"):
+            os.execlp("xdg-open", "xdg-open", script_path)
+        elif shutil.which("vim"):
+            os.execvp("vim", ["vim", script_path])
+        elif shutil.which("nano"):
+            os.execvp("nano", ["nano", script_path])
+        else:
+            os.execvp("vi", ["vi", script_path])
     else:
-        click.echo("VS Code (code) not found in PATH")
+        # Open whole repository
+        click.echo(f"Repository location: {root}")
+        if shutil.which("code"):
+            click.echo("Opening in VS Code...")
+            os.execvp("code", ["code", str(root)])
+        else:
+            click.echo("VS Code (code) not found in PATH")
 
 
 def _do_config(root: Path):

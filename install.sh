@@ -45,13 +45,18 @@ echo "Detected $SHELL_NAME shell, will update $SHELL_RC"
 ARIS_VENV_BIN="$(pwd)/.venv/bin"
 
 # Remove old aris-cli block if present, then add new one
+NEEDS_UPDATE=true
 if grep -q '# >>> aris-cli initialize >>>' "$SHELL_RC" 2>/dev/null; then
-  # Remove everything between the markers (inclusive)
-  sed -i '/# >>> aris-cli initialize >>>/,/# <<< aris-cli initialize <<</d' "$SHELL_RC"
-  echo "Removed old aris-cli block from $SHELL_RC"
+  if grep -q "$ARIS_VENV_BIN" "$SHELL_RC"; then
+    echo "aris-cli already installed with correct path in $SHELL_RC"
+    NEEDS_UPDATE=false
+  else
+    echo "aris-cli path mismatch in $SHELL_RC, updating..."
+    sed -i '/# >>> aris-cli initialize >>>/,/# <<< aris-cli initialize <<</d' "$SHELL_RC"
+  fi
 fi
 
-if ! grep -q 'aris-cli initialize' "$SHELL_RC"; then
+if [ "$NEEDS_UPDATE" = true ]; then
   echo "" >> "$SHELL_RC"
   echo "# >>> aris-cli initialize >>>" >> "$SHELL_RC"
   echo "export PATH=\"$ARIS_VENV_BIN:\$PATH\"" >> "$SHELL_RC"
@@ -59,8 +64,6 @@ if ! grep -q 'aris-cli initialize' "$SHELL_RC"; then
   echo "# <<< aris-cli initialize <<<" >> "$SHELL_RC"
   echo "" >> "$SHELL_RC"
   echo "Added aris-cli to $SHELL_RC"
-else
-  echo "aris-cli block already exists in $SHELL_RC"
 fi
 
 echo "Installation complete. You can now use the 'aris' command."
