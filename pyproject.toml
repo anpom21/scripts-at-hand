@@ -12,4 +12,6 @@ dependencies = [
     "inquirer>=3.0.0",
     "opencv-python>=4.11.0.86",
     "tqdm>=4.67.1",
+    "matplotlib>=3.10.8",
+    "google-cloud-firestore>=2.24.0",
 ]
