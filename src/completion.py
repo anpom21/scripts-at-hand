@@ -304,7 +304,11 @@ def generate_cache(root: Path) -> None:
     # Generate zsh cache
     zsh_content = _generate_zsh_cache_content(root)
     zsh_cache_path = root / "logs" / ".completion_cache.zsh"
-    generate_cache(root: Path) -> None:
+    zsh_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    zsh_cache_path.write_text(zsh_content)
+
+
+def generate_cache(root: Path) -> None:
     """Generate and write the bash completion cache file.
 
     Args:
@@ -323,7 +327,14 @@ def generate_stub(root: Path) -> None:
         root: ARIS CLI repo root.
     """
     content = bash_stub(root)
-    stub_path = root / "logs" / ".completion_stub.bash"--generate-stub  — write bash stub file to logs/
+    stub_path = root / "logs" / ".completion_stub.bash" #generate-stub   write bash stub file to logs/
+    stub_path.parent.mkdir(parents=True, exist_ok=True)
+    stub_path.write_text(content)
+
+
+def main():
+    """
+      aris completion --generate-stub   write bash stub file to logs/
       aris completion --generate-cache — write bash cache file to logs/
     """
     ap = argparse.ArgumentParser(description="Generate bash shell completion")
@@ -349,4 +360,8 @@ def generate_stub(root: Path) -> None:
         generate_stub(root)
     elif args.shell == "bash":
         # Print bash stub to stdout
-        print(ba
+        print(bash_stub(root))
+
+
+if __name__ == "__main__":
+    main()

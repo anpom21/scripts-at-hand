@@ -530,7 +530,7 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
     current_scripts = []
     # Check if repository already exists
     existing_repos = cfg["repositories"] or []
-    existing_repo_cfg = None
+    existing_repo_idx = None
     for i, repo in enumerate(existing_repos):
         if repo["path"] == str(repo_path):
             print(f"Repository already exists in config: {repo.get('name')}. Extracting scripts...")
