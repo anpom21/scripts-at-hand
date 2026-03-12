@@ -61,6 +61,13 @@ else
   echo "Alias already exists in $SHELL_RC"
 fi
 deactivate
-source ~/.bashrc
+
+# Source the appropriate rc file
+if [ "$SHELL_NAME" = "zsh" ]; then
+  # For zsh, we need to handle the sourcing differently
+  echo "Please restart your shell or run: source ~/.zshrc"
+else
+  source ~/.bashrc
+fi
 
 echo "Installation complete. You can now use the 'aris' command."
