@@ -1091,6 +1091,7 @@ def update_scripts_section(cfg: Dict[str, Any], entries: List[ScriptEntry]) -> D
             "hash_id": e.hash_id,
             "ignore": e.ignore,
             "source": e.source,
+            "group": e.group,
             "shortcut": e.shortcut,
             "tags": e.tags if e.tags else [],
         })

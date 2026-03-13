@@ -25,11 +25,6 @@ A lightweight, repo-local CLI that consolidates many production scripts (Python 
 ## Repository Layout
 
 ```
-.
-├── main.sh
-├── config.yaml
-├── scripts/           # drop your local scripts here
-├── logs/              # per-script log folders created automatically
 └── src/
     ├── refresh.py
     ├── run.py
@@ -76,7 +71,9 @@ uv sync --active
 
 ### 2) Add `aris` as a command
 
-Add an alias to your `~/.bashrc` and source the completion script:
+Add an alias to your `~/.bashrc` or `~/.zshrc` and source the completion script:
+
+**For Bash:**
 
 ```bash
 echo "#>>> aris-cli initialize >>>" >> ~/.bashrc
@@ -84,6 +81,16 @@ echo "alias aris='$(pwd)/main.sh'" >> ~/.bashrc
 echo "source <(aris completion bash)" >> ~/.bashrc
 echo "#<<< aris-cli initialize <<<" >> ~/.bashrc
 source ~/.bashrc
+```
+
+**For Zsh:**
+
+```bash
+echo "#>>> aris-cli initialize >>>" >> ~/.zshrc
+echo "alias aris='$(pwd)/main.sh'" >> ~/.zshrc
+echo "source <(aris completion zsh)" >> ~/.zshrc
+echo "#<<< aris-cli initialize <<<" >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ## Usage
@@ -108,6 +115,8 @@ scripts/
 ```
 
 ### 3) Configure external repositories (optional)
+
+# ARIS CLI
 
 Edit `config.yaml`:
 
@@ -180,8 +189,6 @@ The search uses Python's curses library for proper terminal handling, providing 
 
 ## Advanced Features
 
-### Script Shortcuts
-
 Create short aliases for frequently-used scripts by adding a `shortcut` field in `config.yaml`:
 
 ```yaml
@@ -198,7 +205,6 @@ scripts:
 **Usage:**
 
 ```bash
-# Instead of typing the full name:
 aris 0_summarise_imgs_and_annots.py --help
 
 # Use the shortcut:
@@ -207,19 +213,13 @@ aris summarise --help
 
 **Collision Detection:**
 
-- Shortcuts must be unique across all scripts
-- Cannot conflict with reserved commands: `search`, `refresh`, `completion`, `help`
-- Cannot conflict with existing script names
-- Conflicts are automatically disabled with warnings printed to stderr
-
 **Autocompletion:**
 
-- Shortcuts are included in bash completion
+- Shortcuts are included in shell completion (bash and zsh)
 - Type `aris sum` + TAB → completes to `aris summarise`
 
 **Display:**
 
-- `aris --list` shows shortcuts in dim gray next to script names
 - Example: `0_summarise_imgs_and_annots.py (summarise)`
 
 ### Tags and Categorization
@@ -241,7 +241,6 @@ scripts:
 
 **Source as Special Tag:**
 
-- Non-local sources (repository names) automatically act as searchable tags
 - Displayed in **bold yellow** when they match your search
 - Search for "annotation" to find all scripts from the Annotation repository
 - Search for "classification" to find all Classification scripts
@@ -280,12 +279,8 @@ Uses the best available editor:
 
 Reset per-script overrides while preserving shortcuts and tags:
 
-```bash
-aris --reset-config
-```
-
+````
 This resets:
-
 - `python3` path
 - `execution_path`
 - `name` (script name)
@@ -296,12 +291,7 @@ But **preserves**:
 
 - `shortcut`
 - `tags`
-
-Useful when:
-
 - Python environment changes
-- Scripts are moved to different directories
-- Repository structure is reorganized
 
 #### YAML Formatting Preservation
 
@@ -311,7 +301,6 @@ The config file now preserves your custom formatting:
 - **Blank lines** between entries are preserved
 - **Indentation** and structure remain unchanged
 - **Tags** stay in inline format: `tags: [tag1, tag2, tag3]`
-
 You can safely add comments and organize your config:
 
 ```yaml
@@ -332,7 +321,6 @@ repositories:
     scripts:
       - run.sh
       - synthesize.py
-
 # ---------------------------------------------------------------------------- #
 #                                    Scripts                                   #
 # ---------------------------------------------------------------------------- #
@@ -346,7 +334,7 @@ scripts:
     source: Synthetics
     shortcut: synth
     tags: [data_generation, training]
-```
+````
 
 Running `aris --refresh` will **not** remove your comments or blank lines!
 
@@ -393,7 +381,6 @@ If there's a syntax error in `config.yaml`, you'll see a helpful colored error m
 ```
 [ERROR] Config syntax is incorrect
   mapping values are not allowed here
-    in "/home/simon/aris-cli/config.yaml", line 15, column 22
 
    12:   python3: /home/simon/Annotation/.venv/bin/python3
    13:   scripts:
@@ -425,7 +412,6 @@ aris search
 
 # Open config file
 aris --config
-aris -c
 
 # Refresh script index
 aris --refresh
@@ -461,5 +447,5 @@ aris -h
 ## Notes / Extensions
 
 - Add richer metadata by using Python module docstrings or leading shell comments.
-- Extend completion support to zsh/fish by adding generators in `src/completion.py`.
+- Shell completion is supported for both bash and zsh with lazy-loading architecture (zero Python overhead).
 - Add caching or incremental refresh if scripts folder becomes very large.

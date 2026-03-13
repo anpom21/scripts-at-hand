@@ -1,4 +1,3 @@
-
 # ---------------------------------------------------------------------------
 # File: src/run.py
 # ---------------------------------------------------------------------------
@@ -21,6 +20,40 @@ from pathlib import Path
 from utils import load_config, build_script_index, find_entry
 
 
+def list_group_scripts(entries, group_name: str) -> int:
+    """Print scripts in a single group.
+
+    Args:
+        entries: Unified script index.
+        group_name: Group name to filter.
+
+    Returns:
+        Exit code.
+    """
+
+    entries = [e for e in entries if not e.ignore]
+    group_entries = [e for e in entries if e.group == group_name]
+    if not group_entries:
+        return 1
+
+    GREEN = "\033[92m"
+    RED = "\033[0;31m"
+    CYAN = "\033[36m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    print(f"Available scripts in {BOLD}[{group_name}]{RESET}:")
+    for e in sorted(group_entries, key=lambda x: x.name.lower()):
+        name_colored = f"{GREEN}{e.name}{RESET}"
+        shortcut_colored = f" {CYAN}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+        src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
+        desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
+        print(f" {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
+
+    return 0
+
+
 def list_scripts(root: Path) -> int:
     """Print available scripts grouped by folder/repository.
 
@@ -38,13 +71,14 @@ def list_scripts(root: Path) -> int:
     entries = [e for e in entries if not e.ignore]
 
     # Color codes
-    GREEN = "\033[0;32m"
+    GREEN = "\033[92m"
     RED = "\033[0;31m"
+    CYAN = "\033[36m"
     DIM = "\033[2m"
     BOLD = "\033[1m"
     RESET = "\033[0m"
 
-    print("Available scripts:\n")
+    print("Available scripts:")
 
     # Group scripts
     from collections import defaultdict
@@ -58,23 +92,22 @@ def list_scripts(root: Path) -> int:
 
     # Print grouped scripts (sorted alphabetically by group name)
     for group_name in sorted(groups.keys(), key=str.lower):
-        print(f"  {BOLD}[{group_name}]{RESET}")
+        print(f"{BOLD}[{group_name}]{RESET}")
         for e in sorted(groups[group_name], key=lambda x: x.name.lower()):
             name_colored = f"{GREEN}{e.name}{RESET}"
-            shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+            shortcut_colored = f" {CYAN}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
             src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
             desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
-            print(f"    {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
-        print()
+            print(f" {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
 
     # Print ungrouped scripts
     if ungrouped:
         for e in sorted(ungrouped, key=lambda x: x.name.lower()):
             name_colored = f"{GREEN}{e.name}{RESET}"
-            shortcut_colored = f" {DIM}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
+            shortcut_colored = f" {CYAN}({e.shortcut}){RESET}" if getattr(e, "shortcut", "") else ""
             src_colored = f" {RED}[{e.source}]{RESET}" if e.source != "local" else ""
             desc_colored = f" {DIM}- {e.description}{RESET}" if e.description else ""
-            print(f"  {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
+            print(f" {name_colored}{shortcut_colored}{src_colored}{desc_colored}")
 
     return 0
 
@@ -96,12 +129,15 @@ def run_script(root: Path, script_name: str, script_args: list[str]) -> int:
 
     entry = find_entry(entries, script_name)
     if not entry:
+        group_result = list_group_scripts(entries, script_name)
+        if group_result == 0:
+            return 0
         print(f"Unknown script: {script_name}", file=sys.stderr)
         print("Run `aris` to see available scripts.", file=sys.stderr)
         return 2
 
     path = entry.abspath
-    
+
     # Convert relative paths in script_args to absolute paths
     # This preserves paths relative to the user's current directory
     # before we change to execution_path
@@ -157,20 +193,22 @@ def main() -> None:
 
 Execute aris scripts with: aris <script> <args>
 
-Example:
+Examples:
+  aris summarise -h
+  aris --search
   aris collection_annots_overview.py <collection_dir>
-  aris 2_rename_files.py --help
-  aris review_annotations.py -d ./my_collection -n collection_review
-
+  aris --add my_script.py
+  aris --refresh
+  
 Options:
-  search              Interactive search for scripts
-  --add, -a <path>    Add a script (.py/.sh) or git repository (with .git folder)
-  --open, -o          Open repository in VS Code and show repo path
-  --list              List all available scripts
+  --add, -a <path>    Add a script (.py/.sh) or git repository
   --config, -c        Open config.yaml in default editor
-  --refresh           Refresh script index and show changes
-  --revert            Revert config.yaml to previous backup and refresh
-  --reset-config      Reset per-script config (python3, execution_path, name, hash_id, source) but keep shortcuts
+  --refresh, -r       Refresh script index and show changes
+  --list              List all available scripts
+  --search, -s        Interactive search for scripts
+  --open, -o          Open repository in VS Code and show repo path
+  --reset-config      Reset per-script config
+  --revert-config     Revert config.yaml to previous backup and refresh
   --help, -h          Show this help message"""
 
     ap = argparse.ArgumentParser(

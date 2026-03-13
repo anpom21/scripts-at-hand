@@ -63,7 +63,9 @@ fi
 if [ "$NEEDS_UPDATE" = true ]; then
   echo "" >> "$SHELL_RC"
   echo "#>>> aris-cli initialize >>>" >> "$SHELL_RC"
-  echo "alias aris='$(pwd)/run.sh'" >> "$SHELL_RC"
+  echo "aris() {" >> "$SHELL_RC" >> "$SHELL_RC"
+  echo "  '$(pwd)/run.sh' \"\$@\"" >> "$SHELL_RC"
+  echo "}" >> "$SHELL_RC"
   echo "source '$STUB_PATH'" >> "$SHELL_RC"
   echo "#<<< aris-cli initialize <<<" >> "$SHELL_RC"
   echo "" >> "$SHELL_RC"

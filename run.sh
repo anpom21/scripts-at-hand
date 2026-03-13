@@ -59,7 +59,7 @@ case "$SUBCMD" in
     "$PYTHON_BIN" "$ROOT_DIR/src/add.py" --root "$ROOT_DIR" "$@"
     exit 0
     ;;
-  --revert)
+  --revert-config)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/revert.py" --root "$ROOT_DIR" "$@"
     exit 0
@@ -111,7 +111,7 @@ case "$SUBCMD" in
     echo "Resetting configuration completed."
     exit 0
     ;;
-  --refresh)
+  --refresh|-r)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/refresh.py" --root "$ROOT_DIR" --verbose "$@"
     # Regenerate completion cache
@@ -121,6 +121,11 @@ case "$SUBCMD" in
     ;;
   --help|-h|help)
     "$PYTHON_BIN" "$ROOT_DIR/src/run.py" --root "$ROOT_DIR" -h
+    exit 0
+    ;;
+  --search|-s)
+    shift
+    "$PYTHON_BIN" "$ROOT_DIR/src/search.py" --root "$ROOT_DIR" "$@"
     exit 0
     ;;
 esac
