@@ -13,6 +13,5 @@ dependencies = [
     "opencv-python>=4.11.0.86",
     "tqdm>=4.67.1",
     "matplotlib>=3.10.8",
-    "debugpy>=1.8.20",
-    "google-cloud-firestore>=2.26.0",
+    "google-cloud-firestore>=2.24.0",
 ]
