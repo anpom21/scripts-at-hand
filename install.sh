@@ -31,57 +31,67 @@ echo "Generating completion files..."
 "$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-stub
 "$PWD/.venv/bin/python3" "$PWD/src/completion.py" --root "$PWD" --generate-cache
 
-echo "Adding ARIS command alias to shell rc file..."
+echo "Adding ARIS command alias to available shell rc files..."
 
-# Detect shell and set appropriate rc file and stub path
-if [ -n "${ZSH_VERSION:-}" ] || [[ "$SHELL" == *"zsh"* ]]; then
-  SHELL_RC="$HOME/.zshrc"
-  STUB_PATH="$(pwd)/logs/.completion_stub.zsh"
-  SHELL_NAME="zsh"
-else
-  SHELL_RC="$HOME/.bashrc"
-  STUB_PATH="$(pwd)/logs/.completion_stub.bash"
-  SHELL_NAME="bash"
-fi
+ARIS_REPO_ROOT="$(pwd)"
 
-echo "Detected $SHELL_NAME shell, will update $SHELL_RC"
+install_for_shell() {
+  local shell_name="$1"
+  local shell_rc="$2"
+  local stub_path="$3"
+  local needs_update=true
 
-ARIS_VENV_BIN="$(pwd)/.venv/bin"
+  touch "$shell_rc"
+  echo "Configuring $shell_name in $shell_rc"
 
-# Remove old aris-cli block if present, then add new one
-NEEDS_UPDATE=true
-if grep -q '# >>> aris-cli initialize >>>' "$SHELL_RC" 2>/dev/null; then
-  if grep -q "$ARIS_VENV_BIN" "$SHELL_RC"; then
-    echo "aris-cli already installed with correct path in $SHELL_RC"
-    NEEDS_UPDATE=false
-  else
-    echo "aris-cli path mismatch in $SHELL_RC, updating..."
-    sed -i '/# >>> aris-cli initialize >>>/,/# <<< aris-cli initialize <<</d' "$SHELL_RC"
+  if grep -Eq '# ?>>> aris-cli initialize >>>' "$shell_rc" 2>/dev/null; then
+    if grep -q "ARIS_CLI_ROOT=\"$ARIS_REPO_ROOT\"" "$shell_rc"; then
+      echo "aris-cli already installed with correct root path in $shell_rc"
+      needs_update=false
+    else
+      echo "aris-cli root path mismatch in $shell_rc, updating..."
+      sed -i '/# >>> aris-cli initialize >>>/,/# <<< aris-cli initialize <<</d' "$shell_rc"
+      sed -i '/#>>> aris-cli initialize >>>/,/#<<< aris-cli initialize <<</d' "$shell_rc"
+    fi
   fi
+
+  if [ "$needs_update" = true ]; then
+    {
+      echo ""
+      echo "# >>> aris-cli initialize >>>"
+      echo "ARIS_CLI_ROOT=\"$ARIS_REPO_ROOT\""
+      echo "aris() {"
+      echo "  \"\$ARIS_CLI_ROOT/run.sh\" \"\$@\""
+      echo "}"
+      echo "source \"\$ARIS_CLI_ROOT/$stub_path\""
+      echo "# <<< aris-cli initialize <<<"
+      echo ""
+    } >> "$shell_rc"
+
+    echo "Added alias and completion sourcing to $shell_rc"
+  else
+    echo "Alias already exists in $shell_rc"
+  fi
+}
+
+if command -v bash >/dev/null 2>&1; then
+  install_for_shell "bash" "$HOME/.bashrc" "logs/.completion_stub.bash"
+else
+  echo "bash not found; skipping bash rc update"
 fi
 
-if [ "$NEEDS_UPDATE" = true ]; then
-  echo "" >> "$SHELL_RC"
-  echo "#>>> aris-cli initialize >>>" >> "$SHELL_RC"
-  echo "aris() {" >> "$SHELL_RC" >> "$SHELL_RC"
-  echo "  '$(pwd)/run.sh' \"\$@\"" >> "$SHELL_RC"
-  echo "}" >> "$SHELL_RC"
-  echo "source '$STUB_PATH'" >> "$SHELL_RC"
-  echo "#<<< aris-cli initialize <<<" >> "$SHELL_RC"
-  echo "" >> "$SHELL_RC"
-
-  echo "Added alias to $SHELL_RC" 
+if command -v zsh >/dev/null 2>&1; then
+  install_for_shell "zsh" "$HOME/.zshrc" "logs/.completion_stub.zsh"
 else
-  echo "Alias already exists in $SHELL_RC"
+  echo "zsh not found; skipping zsh rc update"
 fi
 deactivate
 
-# Source the appropriate rc file
-if [ "$SHELL_NAME" = "zsh" ]; then
-  # For zsh, we need to handle the sourcing differently
-  echo "Please restart your shell or run: source ~/.zshrc"
-else
+# Source bash rc only when running in bash; zsh users should source manually.
+if [ -n "${BASH_VERSION:-}" ]; then
   source ~/.bashrc
 fi
+
+echo "If you use zsh, run: source ~/.zshrc"
 
 echo "Installation complete. You can now use the 'aris' command."
