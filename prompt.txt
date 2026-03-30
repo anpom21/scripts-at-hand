@@ -1,0 +1,27 @@
+1) Have a config option to ignore a script. Example old config entry:
+- name: 1_organize_into_images_annots.py
+  python3: /home/ap/cloud/ARIS/aris-cli/.venv/bin/python3
+  execution_path: /home/ap/cloud/ARIS/aris-cli/scripts/the_training_bible/organize_data
+  hash_id: d4b78dea6513b2bc63e7f839eb966b5e4299150ff6113a3924b9288b5a76dd08
+  source: local
+  shortcut: organize_folder
+  tags: [training_bible, organize_data, move]
+Example new config entry:
+- name: 1_organize_into_images_annots.py
+  python3: /home/ap/cloud/ARIS/aris-cli/.venv/bin/python3
+  execution_path: /home/ap/cloud/ARIS/aris-cli/scripts/the_training_bible/organize_data
+  hash_id: d4b78dea6513b2bc63e7f839eb966b5e4299150ff6113a3924b9288b5a76dd08
+  ignore: False
+  source: local
+  shortcut: organize_folder
+  tags: [training_bible, organize_data, move]
+If the ignore option is set to true the script should not be available through the aris interface. No auto completion, no script will be run. 
+
+2) In the install script make sure when it is checking whether aris cli is installed that the path that the path to the run.sh matches the entry in .bashrc.
+
+3) Add further functionality to aris -o, where if a filename is given after "aris -o" like "aris -o <filename>" then aris cli will open the script in the default editor (code if available). Obviously check if the script name exists. It should also be possible to open shortcuts. 
+
+4) For the aris --add option make the .venv filter stronger. Filter out any scripts with */lib/python* in their pathing, this should robustly sortout venv's.
+
+5) Add a grouping structure to the aris-cli. A group can be defined in 2 ways: (1) through the folder structure in scripts/ where the parent folder defines the group, if it is a nested folder then the group will simply be parent1/parent2 for ./scripts/parent1/parent2/script.py, (2) through git repositories where the groups will simply be the repository name. If a script is just in the root of scripts/ then no group should be assigned to it. 
+From now on --list will show scripts ordered in their respective groups and groups sorted alphabetically and scripts sorted alphabetically in each group. The group should also be shown in search similarly to how repositories are shown. Finally and importantly, it should also be possible to list scripts in a group be calling aris <group name> and of course this should also be auto completable. 
