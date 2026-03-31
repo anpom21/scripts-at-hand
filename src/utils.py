@@ -495,6 +495,8 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
     # Get repository name from directory name
     repo_name = repo_path.name
     
+    
+    python3_path = None
     # Look for python3 in .venv/bin/
     venv_python = repo_path / ".venv" / "bin" / "python3"
     if venv_python.exists():
@@ -511,8 +513,9 @@ def add_repository_to_config(root: Path, repo_path: Path) -> bool:
                     print(f"Found Python environment: {python3_path}")
                     break
         # Fall back to system python3
-        python3_path = _default_system_python3()
-        print(f"No .venv found, using system Python: {python3_path}")
+        if python3_path is None:
+            python3_path = _default_system_python3()
+            print(f"No .venv found, using system Python: {python3_path}")
     
     # Find available scripts in repository root and subdirectories (excluding venv)
     available_scripts = []

@@ -57,6 +57,10 @@ case "$SUBCMD" in
   --add|-a)
     shift
     "$PYTHON_BIN" "$ROOT_DIR/src/add.py" --root "$ROOT_DIR" "$@"
+    echo "Refreshing config..."
+    # Regenerate completion cache
+    "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" --generate-cache 2>/dev/null
+    "$PYTHON_BIN" "$ROOT_DIR/src/completion.py" --root "$ROOT_DIR" --generate-stub 2>/dev/null
     exit 0
     ;;
   --revert-config)

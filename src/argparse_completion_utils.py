@@ -14,7 +14,7 @@ def get_script_options(script_path: str, python3_path: str = None) -> List[str]:
         python3_path = 'python3'
     try:
         start_time = time.time()
-        result = subprocess.run([python3_path, script_path, '--help'], capture_output=True, text=True, timeout=5)
+        result = subprocess.run([python3_path, script_path, '--help'], capture_output=True, text=True, timeout=10)
         # print(f"{time.time() - start_time:.2f} seconds")
         help_text = result.stdout + '\n' + result.stderr
         import re

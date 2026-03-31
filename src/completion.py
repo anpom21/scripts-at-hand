@@ -714,8 +714,7 @@ def main():
         action="store_true",
         help="Test completion for specified shell (requires shell argument)",
     )
-    args = ["--root", str(Path(__file__).parent.parent), "--generate-cache"]
-    args = ap.parse_args(args)
+    args = ap.parse_args()
 
     root = Path(args.root)
 
