@@ -45,6 +45,10 @@ while [[ $# -gt 0 ]]; do
             SUFFIX="$2"
             shift 2
             ;;
+        --help)
+            echo "Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]"
+            exit 0
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <capture dir name suffix>]"

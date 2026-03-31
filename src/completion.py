@@ -240,7 +240,9 @@ def _generate_cache_content(root: Path) -> str:
     try:
       from argparse_completion_utils import build_script_options_map
       options_map = build_script_options_map(entries)
-    except Exception:
+    except Exception as e:
+      print(f"Error occurred while building script options map:")
+      print(f"Error details: {e}", file=sys.stderr)
       options_map = {}
 
     options_bash = ""
@@ -712,7 +714,8 @@ def main():
         action="store_true",
         help="Test completion for specified shell (requires shell argument)",
     )
-    args = ap.parse_args()
+    args = ["--root", str(Path(__file__).parent.parent), "--generate-cache"]
+    args = ap.parse_args(args)
 
     root = Path(args.root)
 
