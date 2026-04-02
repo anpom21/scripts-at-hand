@@ -7,7 +7,7 @@ set -e  # Exit on error
 
 # Color codes
 BOLD_GREEN='\033[1;32m'
-DARK_GREY='\033[1;30m'
+DARK_GREY='\033[0;37m'
 YELLOW='\033[1;33m'
 BOLD='\033[1m'
 RESET='\033[0m'

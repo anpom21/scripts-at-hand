@@ -14,6 +14,13 @@ TIMESTAMP_RE = re.compile(r'(\d{4}-\d{2}-\d{2})T[\d-]+', re.IGNORECASE)
 def extract_key(filename: str, kind: str):
     name = Path(filename).name
     m = IMG_RE.match(name) if kind == 'img' else ANN_RE.match(name)
+    print(f"m: {m} for filename: {filename} with kind: {kind}")
+    if not m:
+        print(f"Warning: Filename '{filename}' does not match expected pattern for {kind}.")
+        m = re.match(r'^(.+)\.(png|json)$', name, re.IGNORECASE)
+        if not m:
+            #print(f"Warning: Filename '{filename}' does not match fallback pattern either.")
+            return None
     return m.group(1) if m else None
 
 def deduce_category_dir(p: Path) -> Path:
@@ -52,7 +59,12 @@ def scan_aggregate_by_category(root: Path):
         is_img = name.lower().startswith('img_') and name.lower().endswith('.png')
         is_annot = name.lower().startswith('annot_') and name.lower().endswith('.json')
         if not (is_img or is_annot):
-            continue
+            is_img =  name.lower().endswith('.png')
+            is_annot = name.lower().endswith('.json')
+            if not (is_img or is_annot):
+                print(f"Skipping file that is not recognized as image or annot: {p}")
+                continue
+            
 
         cat_dir = deduce_category_dir(p)
         cat_name = cat_dir.name

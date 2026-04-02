@@ -1,0 +1,198 @@
+machines:
+  - name: "happy-elephant"
+    fraction: null
+    ip: 10.0.0.100
+    username: "aris"
+    password: null
+
+  - name: "smoldering-whale"
+    fraction: null
+    ip: 10.0.0.102
+    username: "aris"
+    password: null
+
+  - name: "smiling-donkey"
+    fraction: mineral_wool
+    ip: 10.0.0.103
+    username: "aris"
+    password: null
+
+  - name: "brave-panther"
+    fraction: dangerous_waste
+    ip: 10.0.0.104
+    username: "aris"
+    password: null
+
+  - name: "blushing-lion"
+    fraction: null
+    ip: 10.0.0.99
+    username: "aris"
+    password: null
+
+  - name: "fierce-wolf"
+    fraction: null
+    ip: 10.0.0.105
+    username: "aris"
+    password: null
+
+  - name: "gleaming-tiger"
+    fraction: wood
+    ip: 10.0.0.106
+    username: "aris"
+    password: null
+
+  - name: "jolly-giraffe"
+    fraction: dangerous_waste
+    ip: 10.0.0.107
+    username: "aris"
+    password: null
+
+  - name: "radiant-bear"
+    fraction: wood
+    ip: 10.0.0.108
+    username: "aris"
+    password: null
+
+  - name: "bold-eagle"
+    fraction: wood
+    ip: 10.0.0.109
+    username: "aris"
+    password: null
+
+  - name: "curious-fox"
+    fraction: mineral_wool
+    ip: 10.0.0.110
+    username: "aris"
+    password: null
+
+  - name: "playful-monkey"
+    fraction: mineral_wool
+    ip: 10.0.0.111
+    username: "aris"
+    password: null
+
+  - name: "mysterious-owl"
+    fraction: wood
+    ip: 10.0.0.112
+    username: "aris"
+    password: null
+
+  - name: "gallant-stag"
+    fraction: mineral_wool
+    ip: 10.0.0.113
+    username: "aris"
+    password: null
+
+  - name: "energetic-kangaroo"
+    fraction: wood
+    ip: 10.0.0.114
+    username: "aris"
+    password: null
+
+  - name: "majestic-horse"
+    fraction: mineral_wool
+    ip: 10.0.0.115
+    username: "aris"
+    password: null
+
+  - name: "daring-leopard"
+    fraction: wood
+    ip: 10.0.0.116
+    username: "aris"
+    password: null
+
+  - name: "cheerful-swan"
+    fraction: wood
+    ip: 10.0.0.117
+    username: "aris"
+    password: null
+
+  - name: "sparkling-dolphin"
+    fraction: null
+    ip: 10.0.0.118
+    username: "aris"
+    password: null
+
+  - name: "steady-buffalo"
+    fraction: null
+    ip: 10.0.0.119
+    username: "aris"
+    password: null
+
+  - name: "calm-panda"
+    fraction: null
+    ip: 10.0.0.120
+    username: "aris"
+    password: null
+
+  - name: "vibrant-parrot"
+    fraction: null
+    ip: 10.0.0.121
+    username: "aris"
+    password: null
+
+  - name: "lively-cheetah"
+    fraction: null
+    ip: 10.0.0.122
+    username: "aris"
+    password: null
+
+  - name: "shy-deer"
+    fraction: null
+    ip: 10.0.0.123
+    username: "aris"
+    password: null
+
+  - name: "faithful-beaver"
+    fraction: null
+    ip: 10.0.0.124
+    username: "aris"
+    password: null
+
+  - name: "enormous-mouse"
+    fraction: null
+    ip: 10.0.0.125
+    username: "aris"
+    password: null
+
+  - name: "small-lynx"
+    fraction: null
+    ip: 10.0.0.126
+    username: "aris"
+    password: null
+
+  - name: "fuming-oyster"
+    fraction: null
+    ip: 10.0.0.127
+    username: "aris"
+    password: null
+
+  - name: "fast-turtle"
+    fraction: null
+    ip: 10.0.0.128
+    username: "aris"
+    password: null
+
+  - name: "dull-gull"
+    fraction: null
+    ip: 10.0.0.129
+    username: "aris"
+    password: null
+
+  - name: "personal-snail"
+    fraction: null
+    ip: 10.0.0.130
+    username: "aris"
+    password: null
+
+  - name: "bored-ape"
+    fraction: null
+    ip: 10.0.0.131
+    username: "aris"
+    password: null
+
+  - name: "silent-orangutang"
+    fraction: null
+    ip: 10.0.0.132
+    username: "aris"
+    password: null
