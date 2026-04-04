@@ -13,6 +13,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 MACHINE_CONFIG_PATH="$(dirname "$0")/machine_config.yaml"
+PYTHON="../../.venv/bin/python3"
 
 # Collection base paths by fraction
 declare -A COLLECTION_BASE_BY_FRACTION=(
@@ -27,6 +28,49 @@ COLLECTION_BASE=""
 COLLECTION_BASE_OVERRIDDEN=0
 SUFFIX=""
 ORIGINAL_ARG_COUNT=$#
+
+update_last_sync() {
+    local machine_config_path="$1"
+    local machine_name="$2"
+    local end_date="$3"
+
+    "$PYTHON" - "$machine_config_path" "$machine_name" "$end_date" <<'PY'
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import yaml
+
+config_path = Path(sys.argv[1]).expanduser().resolve()
+machine_name = sys.argv[2]
+end_date = sys.argv[3]
+
+# Validate YYYY-MM-DD format strictly.
+parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+with config_path.open("r", encoding="utf-8") as f:
+    config = yaml.safe_load(f) or {}
+
+machines = config.get("machines", [])
+if not isinstance(machines, list):
+    raise SystemExit("Invalid machine config: 'machines' must be a list")
+
+updated = False
+for machine in machines:
+    if isinstance(machine, dict) and machine.get("name") == machine_name:
+        machine["last_sync"] = parsed_end_date
+        updated = True
+        break
+
+if not updated:
+    raise SystemExit(f"Machine '{machine_name}' not found in machine config")
+
+with config_path.open("w", encoding="utf-8") as f:
+    yaml.safe_dump(config, f, sort_keys=False)
+
+print(f"Updated last_sync for {machine_name} to {end_date}")
+PY
+}
 
 # Parse command line arguments
 #Check that args were provided at all
@@ -165,22 +209,28 @@ for machine in machines:
 
 if selected_last_sync and selected_last_sync.lower() != "null":
     out_path.write_text(
-        f"{selected_machine}\t{selected_last_sync}\t{selected_fraction}\n",
+        f"{selected_machine}\x1f{selected_last_sync}\x1f{selected_fraction}\n",
         encoding="utf-8",
     )
 else:
-    out_path.write_text(f"{selected_machine}\t\t{selected_fraction}\n", encoding="utf-8")
+    out_path.write_text(f"{selected_machine}\x1f\x1f{selected_fraction}\n", encoding="utf-8")
 PY
 
-    if ! python3 "$SELECTOR_SCRIPT" "$MACHINE_CONFIG_PATH" "$SELECTED_MACHINE_FILE"; then
+    if ! "$PYTHON" "$SELECTOR_SCRIPT" "$MACHINE_CONFIG_PATH" "$SELECTED_MACHINE_FILE"; then
         rm -f "$SELECTOR_SCRIPT"
         rm -f "$SELECTED_MACHINE_FILE"
         exit 1
     fi
     rm -f "$SELECTOR_SCRIPT"
 
-    IFS=$'\t' read -r MACHINE LAST_SYNC SELECTED_FRACTION < "$SELECTED_MACHINE_FILE" || true
+    IFS=$'\x1f' read -r MACHINE LAST_SYNC SELECTED_FRACTION < "$SELECTED_MACHINE_FILE" || true
     rm -f "$SELECTED_MACHINE_FILE"
+    echo "Selected fraction: $SELECTED_FRACTION"
+    if [ "$SELECTED_FRACTION" = "dangerous_waste" ]; then
+        echo "----------------------------------------"
+        "$PYTHON" "$(dirname "$0")/dw_sync.py" --unit "$MACHINE"
+        exit $?
+    fi
 
     if [ "$COLLECTION_BASE_OVERRIDDEN" -eq 0 ] && [[ -n "$SELECTED_FRACTION" ]]; then
         if [[ -n "${COLLECTION_BASE_BY_FRACTION[$SELECTED_FRACTION]+x}" ]]; then
@@ -231,7 +281,7 @@ fi
 
 # If collection base was not explicitly provided, derive it from machine fraction.
 if [ "$COLLECTION_BASE_OVERRIDDEN" -eq 0 ] && [ -z "$SELECTED_FRACTION" ]; then
-    SELECTED_FRACTION=$(python3 - "$MACHINE_CONFIG_PATH" "$MACHINE" <<'PY'
+    SELECTED_FRACTION=$("$PYTHON" - "$MACHINE_CONFIG_PATH" "$MACHINE" <<'PY'
 import sys
 from pathlib import Path
 
@@ -327,7 +377,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 1: Running dry run sync...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 sync_image_files.py \
+"$PYTHON" sync_image_files.py \
     --machine "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --begin-date "$BEGIN_DATE" \
@@ -355,7 +405,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 2: Running actual sync...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 sync_image_files.py \
+"$PYTHON" sync_image_files.py \
     --machine "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --begin-date "$BEGIN_DATE" \
@@ -369,7 +419,7 @@ echo -e "${BOLD_GREEN}Step 3: Building inference records...${RESET}"
 echo "----------------------------------------"
 CSV_OUT="$CAPTURE_DIR/bulk_download.csv"
 echo -e "${DARK_GREY}"
-python3 build_inference_records.py \
+"$PYTHON" build_inference_records.py \
     --unit "$MACHINE" \
     --local-dir "$CAPTURE_DIR" \
     --csv-out "$CSV_OUT"
@@ -380,7 +430,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 4: Sorting images from insights (dry run)...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 sort_images_from_insights.py \
+"$PYTHON" sort_images_from_insights.py \
     --images-dir "$CAPTURE_DIR" \
     --csv "$CSV_OUT"
 echo -e "${RESET}"
@@ -406,7 +456,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 5: Sorting images from insights (actual run)...${RESET}"
 echo "----------------------------------------"
 echo -e "${DARK_GREY}"
-python3 sort_images_from_insights.py \
+"$PYTHON" sort_images_from_insights.py \
     --images-dir "$CAPTURE_DIR" \
     --run \
     --csv "$CSV_OUT"
@@ -462,7 +512,7 @@ echo ""
 echo -e "${BOLD_GREEN}Step 7: Checking for offline samples not in bulk download...${RESET}"
 echo "----------------------------------------"
 echo -e "Connecting to $MACHINE...${DARK_GREY}"
-python3 check_bulk_download_gaps.py \
+"$PYTHON" check_bulk_download_gaps.py \
     --bulk-download-csv "$CSV_OUT" \
     --machine "$MACHINE" \
     --machine-config "$(dirname "$0")/machine_config.yaml" \
@@ -476,42 +526,7 @@ echo ""
 echo ""
 echo -e "${BOLD_GREEN}Step 8: Updating machine last_sync...${RESET}"
 echo "----------------------------------------"
-python3 - "$MACHINE_CONFIG_PATH" "$MACHINE" "$END_DATE" <<'PY'
-import sys
-from datetime import datetime
-from pathlib import Path
-
-import yaml
-
-config_path = Path(sys.argv[1]).expanduser().resolve()
-machine_name = sys.argv[2]
-end_date = sys.argv[3]
-
-# Validate YYYY-MM-DD format strictly.
-parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-
-with config_path.open("r", encoding="utf-8") as f:
-    config = yaml.safe_load(f) or {}
-
-machines = config.get("machines", [])
-if not isinstance(machines, list):
-    raise SystemExit("Invalid machine config: 'machines' must be a list")
-
-updated = False
-for machine in machines:
-    if isinstance(machine, dict) and machine.get("name") == machine_name:
-        machine["last_sync"] = parsed_end_date
-        updated = True
-        break
-
-if not updated:
-    raise SystemExit(f"Machine '{machine_name}' not found in machine config")
-
-with config_path.open("w", encoding="utf-8") as f:
-    yaml.safe_dump(config, f, sort_keys=False)
-
-print(f"Updated last_sync for {machine_name} to {end_date}")
-PY
+update_last_sync "$MACHINE_CONFIG_PATH" "$MACHINE" "$END_DATE"
 
 
 echo "Categories with downloaded photos:"

@@ -1,0 +1,7 @@
+data:
+  base_dir: /home/simon/Data/Dangerous_waste_jpg
+units:
+  - name: jolly-giraffe
+    csv_path: /home/simon/Data/Dangerous_waste_jpg/dw_records_jolly-giraffe.csv
+  - name: brave-panther
+    csv_path: /home/simon/Data/Dangerous_waste_jpg/dw_records_brave-panther.csv
