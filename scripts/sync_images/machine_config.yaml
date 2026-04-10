@@ -55,7 +55,7 @@ machines:
   password: null
 - name: bold-eagle
   fraction: wood
-  last_sync: 2026-04-03
+  last_sync: 2026-01-21
   ip: 10.0.0.109
   username: aris
   password: null
@@ -103,7 +103,7 @@ machines:
   password: null
 - name: cheerful-swan
   fraction: wood
-  last_sync: 2026-04-03
+  last_sync: 2026-01-21
   ip: 10.0.0.117
   username: aris
   password: null

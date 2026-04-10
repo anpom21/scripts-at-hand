@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from collections import Counter, defaultdict
 from datetime import datetime
+from tqdm import tqdm
 
 IMG_RE = re.compile(r'^img_(.+)\.png$', re.IGNORECASE)
 ANN_RE = re.compile(r'^annot_(.+)\.json$', re.IGNORECASE)
@@ -14,7 +15,6 @@ TIMESTAMP_RE = re.compile(r'(\d{4}-\d{2}-\d{2})T[\d-]+', re.IGNORECASE)
 def extract_key(filename: str, kind: str):
     name = Path(filename).name
     m = IMG_RE.match(name) if kind == 'img' else ANN_RE.match(name)
-    print(f"m: {m} for filename: {filename} with kind: {kind}")
     if not m:
         print(f"Warning: Filename '{filename}' does not match expected pattern for {kind}.")
         m = re.match(r'^(.+)\.(png|json)$', name, re.IGNORECASE)
@@ -52,7 +52,7 @@ def scan_aggregate_by_category(root: Path):
 
     root = root.resolve()
 
-    for p in root.rglob('*'):
+    for p in tqdm(root.rglob('*')):
         if not p.is_file():
             continue
         name = p.name
