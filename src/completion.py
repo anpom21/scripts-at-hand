@@ -235,18 +235,29 @@ def _generate_cache_content(root: Path) -> str:
     for name, path in script_exec_paths.items():
         exec_paths_bash += f'  ["{name}"]={path!r}\n'
 
-    # Build per-script options map by running scripts with --help
-    # Use argparse_completion_utils for robust extraction
+    # Build per-script options map using static argparse parsing first,
+    # with --help execution as fallback when static extraction finds nothing.
+    # Use argparse_completion_utils for robust extraction.
     try:
       from argparse_completion_utils import build_script_options_map
-      options_map = build_script_options_map(entries)
+      options_cache_path = root / "logs" / ".script_options_cache.json"
+      options_map = build_script_options_map(entries, options_cache_path)
     except Exception as e:
       print(f"Error occurred while building script options map:")
       print(f"Error details: {e}", file=sys.stderr)
       options_map = {}
 
+    # Expand options map so shortcuts share the same options as their script.
+    options_map_with_shortcuts = dict(options_map)
+    for e in entries:
+      name = e.get("name", "")
+      shortcut = e.get("shortcut", "")
+      if not name or not shortcut:
+        continue
+      options_map_with_shortcuts[shortcut] = options_map.get(name, [])
+
     options_bash = ""
-    for name, opts in options_map.items():
+    for name, opts in options_map_with_shortcuts.items():
       opts_str = " ".join(opts) if opts else ""
       options_bash += f'  ["{name}"]={opts_str!r}\n'
 
@@ -394,14 +405,25 @@ def _generate_zsh_cache_content(root: Path) -> str:
     exec_paths_zsh = "\n".join(exec_paths_entries) if exec_paths_entries else ""
 
     # Build per-script options map for zsh completion
+    # (static parse first, --help fallback).
     try:
         from argparse_completion_utils import build_script_options_map
-        z_options_map = build_script_options_map(entries)
+        options_cache_path = root / "logs" / ".script_options_cache.json"
+        z_options_map = build_script_options_map(entries, options_cache_path)
     except Exception:
         z_options_map = {}
 
+    # Expand options map so shortcuts share the same options as their script.
+    z_options_map_with_shortcuts = dict(z_options_map)
+    for e in entries:
+      name = e.get("name", "")
+      shortcut = e.get("shortcut", "")
+      if not name or not shortcut:
+        continue
+      z_options_map_with_shortcuts[shortcut] = z_options_map.get(name, [])
+
     opt_entries = []
-    for name, opts in z_options_map.items():
+    for name, opts in z_options_map_with_shortcuts.items():
         opts_str = " ".join(opts) if opts else ""
         opt_entries.append(f'    {name!r} {opts_str!r}')
 
