@@ -20,6 +20,7 @@ declare -A COLLECTION_BASE_BY_FRACTION=(
     ["wood"]="/home/simon/Data/Collections_wood"
     ["dangerous_waste"]="/home/simon/Data/Dangerous_waste_jpg"
     ["mineral_wool"]="/home/simon/Data/Collections_mineral_wool"
+    ["plastic"]="/home/simon/Data/Collections_plastic"
     ["unassigned"]="/home/simon/Data/Collections_unassigned"
 )
 
@@ -102,12 +103,15 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help)
-            echo "Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]"
+            echo "Sync and sort images from a machine by date range."
+            echo "Interactive mode (no args): bash sync_and_sort_images.sh"
+            echo "Legacy Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]"
             exit 0
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <capture dir name suffix>]"
+            echo "Interactive mode (no args): bash sync_and_sort_images.sh"
+            echo "Legacy Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]"
             exit 1
             ;;
     esac

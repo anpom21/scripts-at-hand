@@ -97,7 +97,7 @@ machines:
   password: null
 - name: daring-leopard
   fraction: wood
-  last_sync: 2026-01-21
+  last_sync: 2026-04-12
   ip: 10.0.0.116
   username: aris
   password: null
