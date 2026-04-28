@@ -21,7 +21,6 @@ CSV layout (example):
 Result:
   same columns + a new "gt" column with the category (e.g., "indoor_wood", "hands")
 """
-from __future__ import annotations
 
 
 import argparse
@@ -41,6 +40,8 @@ def build_filename_to_category_map(images_root: Path) -> dict[str, str]:
             continue
         fname = p.name  # basename with extension
         category = p.parent.name
+        if category == 'images':
+            category = p.parent.parent.name  # Handle one extra nesting level if present
         if fname not in mapping:
             mapping[fname] = category
         else:

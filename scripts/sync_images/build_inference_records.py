@@ -312,8 +312,7 @@ def main():
         help="Optional GCP project id for Firestore. If omitted, uses default credentials/project.",
     )
     # --unit bold-eagle --local-dir /home/simon/Data/Collections_wood/2026-04-11_2026-04-12_prod-data_bold-eagle --csv-out ./test.csv
-    arg = ["--unit", "bold-eagle", "--local-dir", "/home/simon/Data/Collections_wood/2026-04-11_2026-04-12_prod-data_bold-eagle", "--csv-out", "./test.csv"]
-    args = parser.parse_args(arg)
+    args = parser.parse_args()
 
     unit = args.unit
     local_dir = Path(args.local_dir).expanduser().resolve()

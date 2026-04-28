@@ -37,7 +37,7 @@ machines:
   password: null
 - name: gleaming-tiger
   fraction: wood
-  last_sync: null
+  last_sync: 2026-04-22
   ip: 10.0.0.106
   username: aris
   password: null
@@ -55,7 +55,7 @@ machines:
   password: null
 - name: bold-eagle
   fraction: wood
-  last_sync: 2026-01-21
+  last_sync: 2026-04-12
   ip: 10.0.0.109
   username: aris
   password: null
