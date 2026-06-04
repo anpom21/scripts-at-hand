@@ -24,6 +24,14 @@ declare -A COLLECTION_BASE_BY_FRACTION=(
     ["unassigned"]="/home/simon/Data/Collections_unassigned"
 )
 
+declare -A CATEGORY_TEMPLATE_BY_FRACTION=(
+    ["wood"]="/home/simon/Repositories/image-sorter/category_templates/wood"
+    ["dangerous_waste"]="None"
+    ["mineral_wool"]="/home/simon/Repositories/image-sorter/category_templates/mineral_wool"
+    ["plastic"]="/home/simon/Repositories/image-sorter/category_templates/plastic"
+    ["unassigned"]="None"
+)
+
 # Collection base is resolved after fraction is known (or via --collection-base).
 COLLECTION_BASE=""
 COLLECTION_BASE_OVERRIDDEN=0
@@ -470,8 +478,13 @@ echo -e "${RESET}"
 echo ""
 echo -e "${BOLD_GREEN}Step 6: Ensuring all category folders exist...${RESET}"
 echo "----------------------------------------"
-CATEGORY_TEMPLATE_PATH="/home/simon/Data/category_templates/wood"
-if [ -d "$CATEGORY_TEMPLATE_PATH" ]; then
+CATEGORY_TEMPLATE_PATH=""
+if [[ -n "$SELECTED_FRACTION" && -n "${CATEGORY_TEMPLATE_BY_FRACTION[$SELECTED_FRACTION]+x}" ]]; then
+    CATEGORY_TEMPLATE_PATH="${CATEGORY_TEMPLATE_BY_FRACTION[$SELECTED_FRACTION]}"
+fi
+if [ "$CATEGORY_TEMPLATE_PATH" = "None" ]; then
+    echo "No category template configured for fraction: $SELECTED_FRACTION"
+elif [ -d "$CATEGORY_TEMPLATE_PATH" ]; then
     echo "Checking category folders against template..."
     
     # Get list of expected folders from template
