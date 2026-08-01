@@ -14,6 +14,7 @@ Example:
         --source-dir /path/to/real_files_base \
         --output-dir /path/to/output_symlink_structure \
         --extensions .jpg .jpeg .png \
+        --to-classes \
         --dry-run
 
 Notes:
@@ -38,6 +39,22 @@ from colorama import Fore, Back, Style, init
 # Initialize colorama for cross-platform color support
 init(autoreset=True)
 
+IMAGE_EXTENSIONS = {
+    ".bmp",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+ANNOTATION_EXTENSIONS = {
+    ".json",
+    ".txt",
+    ".xml",
+}
+SUPPORTED_EXTENSIONS = IMAGE_EXTENSIONS | ANNOTATION_EXTENSIONS
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -45,9 +62,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--reference-dir",
-        required=True,
         type=Path,
-        help="Directory whose folder structure and filenames should be mirrored."
+        help=(
+            "Directory whose folder structure and filenames should be mirrored. "
+            "Required unless --to-classes is given; in that mode, source-dir is "
+            "used as the reference tree when this option is omitted."
+        ),
     )
     parser.add_argument(
         "--source-dir",
@@ -65,7 +85,11 @@ def parse_args() -> argparse.Namespace:
         "--extensions",
         nargs="*",
         default=None,
-        help="Optional list of file extensions to include, e.g. .jpg .jpeg .png"
+        help=(
+            "Optional subset of supported image and annotation extensions to include. "
+            "Defaults to: "
+            + " ".join(sorted(SUPPORTED_EXTENSIONS))
+        ),
     )
     parser.add_argument(
         "--relative-links",
@@ -102,13 +126,25 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show a tree-style folder structure summary (skips 'images' and 'annots')."
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--to-classes",
+        action="store_true",
+        help=(
+            "Merge class folders from capture directories into top-level class folders "
+            "in the output (capture/class/... becomes class/...)."
+        ),
+    )
+    args = parser.parse_args()
+    if args.reference_dir is None and not args.to_classes:
+        parser.error("--reference-dir is required unless --to-classes is given")
+
+    return args
 
 
-def normalize_extensions(exts: List[str] | None) -> set[str] | None:
+def normalize_extensions(exts: List[str] | None) -> set[str]:
     if exts is None:
-        return None
-    out = set()
+        return set(SUPPORTED_EXTENSIONS)
+    out: set[str] = set()
     for ext in exts:
         ext = ext.strip().lower()
         if not ext:
@@ -116,20 +152,44 @@ def normalize_extensions(exts: List[str] | None) -> set[str] | None:
         if not ext.startswith("."):
             ext = "." + ext
         out.add(ext)
+
+    unsupported = out - SUPPORTED_EXTENSIONS
+    if unsupported:
+        raise ValueError(
+            "unsupported file extensions: "
+            + ", ".join(sorted(unsupported))
+            + ". Supported extensions are: "
+            + ", ".join(sorted(SUPPORTED_EXTENSIONS))
+        )
     return out
 
 
-def should_include_file(path: Path, allowed_exts: set[str] | None) -> bool:
-    if not path.is_file():
-        return False
-    if allowed_exts is None:
-        return True
-    return path.suffix.lower() in allowed_exts
+def should_include_file(path: Path, allowed_exts: set[str]) -> bool:
+    return path.is_file() and path.suffix.lower() in allowed_exts
+
+
+def output_relative_path(
+    ref_path: Path,
+    reference_dir: Path,
+    to_classes: bool,
+) -> Path:
+    """Return the reference path, optionally without its capture directory."""
+    rel_path = ref_path.relative_to(reference_dir)
+    if not to_classes:
+        return rel_path
+
+    if len(rel_path.parts) < 3:
+        raise ValueError(
+            "--to-classes expects files below a capture and class directory, "
+            f"but found: {rel_path}"
+        )
+
+    return Path(*rel_path.parts[1:])
 
 
 def build_source_index(
     source_dir: Path,
-    allowed_exts: set[str] | None,
+    allowed_exts: set[str],
     allow_duplicates: bool
 ) -> Dict[str, Path]:
     """
@@ -354,8 +414,8 @@ class FileStatistics:
 def main() -> None:
     args = parse_args()
 
-    reference_dir = args.reference_dir.resolve()
     source_dir = args.source_dir.resolve()
+    reference_dir = (args.reference_dir or source_dir).resolve()
     output_dir = args.output_dir.resolve()
 
     if not reference_dir.is_dir():
@@ -374,7 +434,11 @@ def main() -> None:
                 file=sys.stderr,
             )
 
-    allowed_exts = normalize_extensions(args.extensions)
+    try:
+        allowed_exts = normalize_extensions(args.extensions)
+    except ValueError as exc:
+        print(f"{Fore.RED}{Style.BRIGHT}Error: {exc}{Style.RESET_ALL}", file=sys.stderr)
+        sys.exit(1)
 
     source_index = build_source_index(
         source_dir=source_dir,
@@ -394,8 +458,13 @@ def main() -> None:
         disable=False,
     )
     for ref_path in reference_iter:
-        if should_include_file(ref_path, allowed_exts):
-            reference_files.append(ref_path)
+        if not should_include_file(ref_path, allowed_exts):
+            continue
+        if args.to_classes:
+            rel_path = ref_path.relative_to(reference_dir)
+            if len(rel_path.parts) < 3:
+                continue
+        reference_files.append(ref_path)
     reference_iter.close()
 
     file_stats = FileStatistics()
@@ -419,7 +488,15 @@ def main() -> None:
     )
 
     for ref_path in progress_bar:
-        rel_path = ref_path.relative_to(reference_dir)
+        try:
+            rel_path = output_relative_path(
+                ref_path=ref_path,
+                reference_dir=reference_dir,
+                to_classes=args.to_classes,
+            )
+        except ValueError as exc:
+            print(f"{Fore.RED}{Style.BRIGHT}Error: {exc}{Style.RESET_ALL}", file=sys.stderr)
+            sys.exit(1)
         output_path = output_dir / rel_path
 
         source_match = source_index.get(ref_path.name)

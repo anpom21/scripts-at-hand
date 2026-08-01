@@ -256,6 +256,7 @@ PY
     fi
 
     if [[ -n "$LAST_SYNC" && "$LAST_SYNC" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+
         read -p "Use last sync date ${LAST_SYNC} as begin date? [Y/n]: " -r
         if [ -z "$REPLY" ]; then
             REPLY="y"
@@ -563,4 +564,20 @@ done
 echo ""
 echo "=========================================="
 echo "All steps completed successfully!"
+echo "Capture folder: $CAPTURE_DIR"
+if command -v wl-copy >/dev/null 2>&1; then
+    printf "%s" "$CAPTURE_DIR" | wl-copy
+    echo "Copied capture folder path to clipboard."
+elif command -v xclip >/dev/null 2>&1; then
+    printf "%s" "$CAPTURE_DIR" | xclip -selection clipboard
+    echo "Copied capture folder path to clipboard."
+elif command -v xsel >/dev/null 2>&1; then
+    printf "%s" "$CAPTURE_DIR" | xsel --clipboard --input
+    echo "Copied capture folder path to clipboard."
+elif command -v pbcopy >/dev/null 2>&1; then
+    printf "%s" "$CAPTURE_DIR" | pbcopy
+    echo "Copied capture folder path to clipboard."
+else
+    echo "Could not copy to clipboard: no clipboard command found."
+fi
 echo "=========================================="

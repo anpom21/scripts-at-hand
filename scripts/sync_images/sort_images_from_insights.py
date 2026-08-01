@@ -5,6 +5,14 @@ import os
 import shutil
 import sys
 
+
+SORT_CLASS = {
+    "outdoor_wood": "impregnated_wood",
+    "indoor_wood": "normal_wood"
+}
+
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Sort images into folders based on CSV annotations."
@@ -101,6 +109,12 @@ def main():
                 print(f"Skipping '{image_name}': no valid category found.")
                 skipped_count += 1
                 continue
+
+            # Check if destination is in SORTING_CLASS dictionary
+            if destination in SORT_CLASS.keys():
+                destination = SORT_CLASS[destination]
+            
+
 
             src_path = os.path.join(images_dir, image_name)
             target_dir = os.path.join(images_dir, destination)

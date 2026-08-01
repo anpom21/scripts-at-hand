@@ -5,3 +5,5 @@ units:
     csv_path: /home/simon/Data/Dangerous_waste_jpg/dw_records_jolly-giraffe.csv
   - name: brave-panther
     csv_path: /home/simon/Data/Dangerous_waste_jpg/dw_records_brave-panther.csv
+  - name: sparkling-dolphin
+    csv_path: /home/simon/Data/Dangerous_waste_jpg/dw_records_sparkling-dolphin.csv
