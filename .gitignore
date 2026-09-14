@@ -9,7 +9,7 @@ __pycache__/
 logs/.old_config.yaml
 logs/.pre_revert_config.yaml
 
-
+.test_collection/
 # --------------------------- GitHub python default -------------------------- #
 # Byte-compiled / optimized / DLL files
 __pycache__/

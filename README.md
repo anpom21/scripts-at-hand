@@ -171,3 +171,11 @@ scripts/
 └── other_scripts/
     └── run.py
 ```
+
+
+
+## DW Sync
+Run pytest
+```
+cd /home/simon/aris-cli && uv sync --group dev && uv run pytest -v
+```

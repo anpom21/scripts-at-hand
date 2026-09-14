@@ -1,5 +1,6 @@
 #!/bin/bash
 # Syncs images from GCS by date range, builds inference records, and sorts them into category folders.
+# Dangerous waste machines are handed to dw_sync.py with the same date range instead.
 # Script to sync and sort images from a machine
 # Usage: bash sync_and_sort_images.sh --machine <machine> --begin-date <date> --end-date <date> [--capture-dir <dir>] [--collection-base <path>] [--suffix <suffix>]
 
@@ -81,6 +82,28 @@ print(f"Updated last_sync for {machine_name} to {end_date}")
 PY
 }
 
+# Offers a login until the given check command gets a token without prompting.
+# gsutil and the Firestore clients run without a terminal, so an expired login or a
+# reauthentication challenge would otherwise only surface mid-sync.
+# Usage: ensure_auth <label> <login command> <check command...>
+ensure_auth() {
+    local label="$1"
+    local login_cmd="$2"
+    shift 2
+
+    while ! "$@" </dev/null >/dev/null 2>&1; do
+        echo -e "${YELLOW}${label} credentials are expired or need reauthentication.${RESET}"
+        read -p "Run '${login_cmd}' now? [Y/n]: " -r
+        if [[ -n "$REPLY" && ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborting: cannot sync without valid ${label} credentials."
+            exit 1
+        fi
+        # login_cmd is split into words on purpose.
+        $login_cmd || true
+    done
+    echo "  ${label}: OK"
+}
+
 # Parse command line arguments
 #Check that args were provided at all
 while [[ $# -gt 0 ]]; do
@@ -124,6 +147,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Check credentials before any prompts, so a login is not discovered halfway through.
+if ! command -v gcloud >/dev/null 2>&1; then
+    echo "Error: gcloud is not installed or not on PATH."
+    exit 1
+fi
+echo "Checking Google Cloud authentication..."
+ensure_auth "gcloud (gsutil)" "gcloud auth login" gcloud auth print-access-token
+ensure_auth "Application Default (Firestore)" "gcloud auth application-default login" gcloud auth application-default print-access-token
 
 # Interactive mode: if no args were provided, select fraction + machine from config.
 if [ "$ORIGINAL_ARG_COUNT" -eq 0 ]; then
@@ -238,11 +270,6 @@ PY
     IFS=$'\x1f' read -r MACHINE LAST_SYNC SELECTED_FRACTION < "$SELECTED_MACHINE_FILE" || true
     rm -f "$SELECTED_MACHINE_FILE"
     echo "Selected fraction: $SELECTED_FRACTION"
-    if [ "$SELECTED_FRACTION" = "dangerous_waste" ]; then
-        echo "----------------------------------------"
-        "$PYTHON" "$(dirname "$0")/dw_sync.py" --unit "$MACHINE"
-        exit $?
-    fi
 
     if [ "$COLLECTION_BASE_OVERRIDDEN" -eq 0 ] && [[ -n "$SELECTED_FRACTION" ]]; then
         if [[ -n "${COLLECTION_BASE_BY_FRACTION[$SELECTED_FRACTION]+x}" ]]; then
@@ -327,6 +354,29 @@ PY
     if [[ -n "$SELECTED_FRACTION" ]] && [[ -n "${COLLECTION_BASE_BY_FRACTION[$SELECTED_FRACTION]+x}" ]]; then
         COLLECTION_BASE="${COLLECTION_BASE_BY_FRACTION[$SELECTED_FRACTION]}"
     fi
+fi
+
+# Dangerous waste keeps one running records CSV per unit rather than capture folders,
+# so it syncs through dw_sync.py for the chosen date range and skips the steps below.
+if [ "$SELECTED_FRACTION" = "dangerous_waste" ]; then
+    echo "----------------------------------------"
+    DW_RC=0
+    "$PYTHON" "$(dirname "$0")/dw_sync.py" \
+        --unit "$MACHINE" \
+        --begin-date "$BEGIN_DATE" \
+        --end-date "$END_DATE" || DW_RC=$?
+    if [ "$DW_RC" -eq 3 ]; then
+        echo "Operation aborted by user. last_sync not updated."
+        exit 0
+    fi
+    if [ "$DW_RC" -ne 0 ]; then
+        exit "$DW_RC"
+    fi
+    echo ""
+    echo -e "${BOLD_GREEN}Updating machine last_sync...${RESET}"
+    echo "----------------------------------------"
+    update_last_sync "$MACHINE_CONFIG_PATH" "$MACHINE" "$END_DATE"
+    exit 0
 fi
 
 if [ "$COLLECTION_BASE_OVERRIDDEN" -eq 0 ] && [ -z "$COLLECTION_BASE" ]; then

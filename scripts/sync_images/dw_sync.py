@@ -5,37 +5,22 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import inquirer
 import yaml
 from google.cloud import firestore
 
-EVAL_FIELDS = ["category", "constituent", "instruction", "un_number"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-CSV_HEADER = (
-	["doc_id", "unit", "timestamp_ms", "timestamp_iso", "human_eval"]
-	+ [f"eval_{k}" for k in EVAL_FIELDS]
-	+ [
-		"front_image_1",
-		"front_image_2",
-		"front_image_3",
-		"back_image_1",
-		"back_image_2",
-		"back_image_3",
-	]
-)
+import dw_records
+from dw_records import IMAGE_COLS, DwRecordError
 
-IMAGE_COLS = [
-	"front_image_1",
-	"front_image_2",
-	"front_image_3",
-	"back_image_1",
-	"back_image_2",
-	"back_image_3",
-]
+# Returned when the user declines a prompt, so sync_and_sort_images.sh can tell an
+# abort from a completed sync and leave last_sync alone.
+EXIT_ABORTED = 3
 
 
 @dataclass(frozen=True)
@@ -57,171 +42,28 @@ class DownloadItem:
 	basename: str
 
 
-def ms_to_iso_utc(ms: int) -> str:
-	dt = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
-	return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-
-
-def extract_doc_timestamp_ms(doc_id: str, unit: str) -> Optional[int]:
-	prefix = f"{unit}_"
-	if not doc_id.startswith(prefix):
-		return None
-	suffix = doc_id[len(prefix) :]
-	if not suffix.isdigit():
-		return None
-	try:
-		return int(suffix)
-	except ValueError:
-		return None
-
-
-def pad_images(values: Any, n: int = 3) -> List[str]:
-	if not isinstance(values, list):
-		values = []
-	out = [str(x) for x in values[:n]]
-	while len(out) < n:
-		out.append("")
-	return out
-
-
-def safe_get(d: Dict[str, Any], path: str) -> str:
-	cur: Any = d
-	for part in path.split("."):
-		if not isinstance(cur, dict) or part not in cur:
-			return ""
-		cur = cur[part]
-		if cur is None:
-			return ""
-	return str(cur)
-
-
-def row_from_firestore_doc(unit: str, doc_id: str, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
-	ts = extract_doc_timestamp_ms(doc_id, unit)
-	if ts is None:
-		return None
-
-	front = pad_images(data.get("front_images"), 3)
-	back = pad_images(data.get("back_images"), 3)
-
-	eval_obj = data.get("eval")
-	has_eval_map = isinstance(eval_obj, dict)
-
-	row: Dict[str, str] = {
-		"doc_id": doc_id,
-		"unit": unit,
-		"timestamp_ms": str(ts),
-		"timestamp_iso": ms_to_iso_utc(ts),
-		"human_eval": "",
-		"front_image_1": front[0],
-		"front_image_2": front[1],
-		"front_image_3": front[2],
-		"back_image_1": back[0],
-		"back_image_2": back[1],
-		"back_image_3": back[2],
-	}
-
-	if has_eval_map:
-		for k in EVAL_FIELDS:
-			row[f"eval_{k}"] = safe_get(data, f"eval.{k}")
-	else:
-		for k in EVAL_FIELDS:
-			row[f"eval_{k}"] = ""
-
-	for col in CSV_HEADER:
-		row.setdefault(col, "")
-
-	return row
-
-
-def read_existing_csv(csv_path: Path) -> List[Dict[str, str]]:
-	rows: List[Dict[str, str]] = []
-	with csv_path.open("r", newline="", encoding="utf-8") as f:
-		reader = csv.DictReader(f)
-		for r in reader:
-			nr = {col: (r.get(col, "") or "") for col in CSV_HEADER}
-			rows.append(nr)
-	return rows
-
-
-def write_csv(csv_path: Path, rows: List[Dict[str, str]]) -> None:
-	def ts_key(r: Dict[str, str]) -> int:
-		try:
-			return int(r.get("timestamp_ms", "0") or "0")
-		except ValueError:
-			return 0
-
-	rows_sorted = sorted(rows, key=ts_key, reverse=True)
-
-	csv_path.parent.mkdir(parents=True, exist_ok=True)
-	with csv_path.open("w", newline="", encoding="utf-8") as f:
-		writer = csv.DictWriter(f, fieldnames=CSV_HEADER)
-		writer.writeheader()
-		for r in rows_sorted:
-			writer.writerow({col: r.get(col, "") for col in CSV_HEADER})
-
-
-def fetch_firestore_rows(unit: str, project: Optional[str] = None) -> List[Dict[str, str]]:
+def fetch_documents(unit: str, project: Optional[str] = None) -> List[Tuple[str, Dict[str, Any]]]:
 	db = firestore.Client(project=project) if project else firestore.Client()
 	col_ref = db.collection("units").document(unit).collection("dangerous-waste-records")
-
-	rows: List[Dict[str, str]] = []
-	skipped_bad_ids = 0
-
-	for snap in col_ref.stream():
-		data = snap.to_dict() or {}
-		row = row_from_firestore_doc(unit=unit, doc_id=snap.id, data=data)
-		if row is None:
-			skipped_bad_ids += 1
-			continue
-		rows.append(row)
-
-	if skipped_bad_ids:
-		print(f"Note: skipped {skipped_bad_ids} docs due to unexpected doc_id format.", file=sys.stderr)
-
-	return rows
+	return [(snap.id, snap.to_dict() or {}) for snap in col_ref.stream()]
 
 
-def merge_preserving_human_eval(
-	existing_rows: List[Dict[str, str]],
-	firestore_rows: List[Dict[str, str]],
-) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
-	existing_by_id = {r["doc_id"]: r for r in existing_rows if r.get("doc_id")}
-	merged_by_id: Dict[str, Dict[str, str]] = dict(existing_by_id)
-
-	new_rows: List[Dict[str, str]] = []
-
-	for fr in firestore_rows:
-		doc_id = fr.get("doc_id", "")
-		if not doc_id:
-			continue
-
-		if doc_id not in merged_by_id:
-			merged_by_id[doc_id] = fr
-			new_rows.append(fr)
-		else:
-			cur = merged_by_id[doc_id]
-			human_eval_val = cur.get("human_eval", "")
-			updated = {col: fr.get(col, "") for col in CSV_HEADER}
-			updated["human_eval"] = human_eval_val
-			merged_by_id[doc_id] = updated
-
-	merged_rows = list(merged_by_id.values())
-	return merged_rows, new_rows
+def read_existing_csv(csv_path: Path) -> Tuple[List[Dict[str, str]], List[str]]:
+	"""Return the existing rows as written, plus the header they were written with."""
+	with csv_path.open("r", newline="", encoding="utf-8") as f:
+		reader = csv.DictReader(f)
+		header = list(reader.fieldnames or [])
+		rows = [{k: (v or "") for k, v in r.items() if k is not None} for r in reader]
+	return rows, header
 
 
-def summarize_new_rows(new_rows: List[Dict[str, str]], limit: int = 10) -> None:
-	if not new_rows:
-		return
-
-	new_rows_sorted = sorted(
-		new_rows,
-		key=lambda r: int(r.get("timestamp_ms", "0") or "0"),
-		reverse=True,
-	)
-
-	print(f"Found {len(new_rows_sorted)} new record(s). Showing up to {limit}:")
-	for r in new_rows_sorted[:limit]:
-		print(f"  - {r['doc_id']} | {r['timestamp_iso']} | eval_un_number={r.get('eval_un_number', '')}")
+def write_csv(csv_path: Path, header: Sequence[str], rows: Sequence[Dict[str, str]]) -> None:
+	csv_path.parent.mkdir(parents=True, exist_ok=True)
+	with csv_path.open("w", newline="", encoding="utf-8") as f:
+		writer = csv.DictWriter(f, fieldnames=list(header))
+		writer.writeheader()
+		for r in rows:
+			writer.writerow({col: r.get(col, "") for col in header})
 
 
 def unit_normalize(unit_id: str) -> str:
@@ -272,6 +114,8 @@ def read_csv_and_plan_downloads(
 	bucket: str,
 	remote_prefix: str,
 	existing_basenames: Set[str],
+	begin_date: Optional[date] = None,
+	end_date: Optional[date] = None,
 ) -> List[DownloadItem]:
 	planned: List[DownloadItem] = []
 	remote_prefix = remote_prefix.strip("/")
@@ -286,9 +130,13 @@ def read_csv_and_plan_downloads(
 
 		row_count = 0
 		image_refs = 0
+		out_of_range = 0
 
 		for row in reader:
 			row_count += 1
+			if not dw_records.row_in_date_range(row, unit_hyphen, begin_date, end_date):
+				out_of_range += 1
+				continue
 			for col in IMAGE_COLS:
 				fname = (row.get(col) or "").strip()
 				if not fname:
@@ -319,6 +167,8 @@ def read_csv_and_plan_downloads(
 				planned.append(DownloadItem(uri=uri, dest_dir=dest_dir, basename=base))
 
 		print(f"[INFO] Processed {row_count} CSV rows; saw {image_refs} image references total.")
+		if out_of_range:
+			print(f"[INFO] Skipped {out_of_range} CSV row(s) outside the date range.")
 		print(f"[INFO] Planned {len(planned)} downloads (missing locally).")
 
 	unique: Dict[str, DownloadItem] = {}
@@ -389,6 +239,15 @@ def prompt_yes_no(msg: str) -> bool:
 		print("Please answer 'y' or 'n'.")
 
 
+def parse_date_arg(value: Optional[str], flag: str) -> Optional[date]:
+	if not value:
+		return None
+	try:
+		return date.fromisoformat(value)
+	except ValueError:
+		raise ValueError(f"Invalid {flag}: {value}. Expected YYYY-MM-DD.")
+
+
 def load_sync_config(config_path: Path) -> SyncConfig:
 	with config_path.open("r", encoding="utf-8") as f:
 		data = yaml.safe_load(f) or {}
@@ -441,6 +300,11 @@ def main() -> int:
 	)
 	parser.add_argument("--config", default=str(default_config_path), help="Path to YAML config file.")
 	parser.add_argument("--unit", help="Unit id. If omitted, an interactive picker is shown.")
+	parser.add_argument(
+		"--begin-date",
+		help="Only sync records on or after this local date (YYYY-MM-DD). CSV rows outside the range are left untouched.",
+	)
+	parser.add_argument("--end-date", help="Only sync records on or before this local date (YYYY-MM-DD).")
 	parser.add_argument("--csv-path", help="Optional CSV override; defaults to selected unit csv_path in config.")
 	parser.add_argument("--base-dir", help="Optional base dir override; defaults to data.base_dir in config.")
 	parser.add_argument("--project", default=None, help="GCP project id (optional)")
@@ -456,6 +320,16 @@ def main() -> int:
 	parser.add_argument("--output-missing-uris", help="Optional path to write planned missing image URIs.")
 	parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts.")
 	args = parser.parse_args()
+
+	try:
+		begin_date = parse_date_arg(args.begin_date, "--begin-date")
+		end_date = parse_date_arg(args.end_date, "--end-date")
+	except ValueError as e:
+		print(f"[ERROR] {e}")
+		return 1
+	if begin_date and end_date and begin_date > end_date:
+		print("[ERROR] begin-date cannot be after end-date.")
+		return 1
 
 	config_path = Path(args.config).expanduser().resolve()
 	if not config_path.exists():
@@ -491,6 +365,7 @@ def main() -> int:
 	print(f"[INFO] CSV path       : {csv_path}")
 	print(f"[INFO] Bucket         : {args.bucket}")
 	print(f"[INFO] Remote prefix  : {args.remote_prefix.strip('/')}")
+	print(f"[INFO] Date range	 : {begin_date or 'earliest'} -> {end_date or 'latest'}")
 
 	if not base_dir.exists():
 		print(f"[ERROR] Base dir does not exist: {base_dir}")
@@ -498,30 +373,35 @@ def main() -> int:
 
 	if not args.skip_records:
 		print("[STAGE] Syncing Firestore inference records -> CSV")
-		firestore_rows = fetch_firestore_rows(unit=unit, project=args.project)
+		docs = fetch_documents(unit=unit, project=args.project)
 
-		if not csv_path.exists():
-			print(f"CSV does not exist. Creating: {csv_path}")
-			write_csv(csv_path, firestore_rows)
-			print(f"Wrote {len(firestore_rows)} row(s).")
+		existing_rows: List[Dict[str, str]] = []
+		existing_header: List[str] = []
+		if csv_path.exists():
+			existing_rows, existing_header = read_existing_csv(csv_path)
 		else:
-			existing_rows = read_existing_csv(csv_path)
-			merged_rows, new_rows = merge_preserving_human_eval(existing_rows, firestore_rows)
+			print(f"CSV does not exist. Creating: {csv_path}")
 
-			if new_rows:
-				summarize_new_rows(new_rows, limit=10)
-				if not args.yes:
-					if not prompt_yes_no(f"Update CSV with {len(new_rows)} new record(s)?"):
-						print("Aborted. CSV not modified.")
-						return 0
+		try:
+			table = dw_records.build_unit_table(unit, docs)
+			rec = dw_records.reconcile(table, existing_rows, existing_header, begin_date, end_date)
+		except DwRecordError as e:
+			print(f"[ERROR] {e}", file=sys.stderr)
+			return 1
 
-			write_csv(csv_path, merged_rows)
-			if new_rows:
-				print(f"Updated CSV: {csv_path}")
-				print(f"Rows before: {len(existing_rows)}")
-				print(f"Rows after : {len(merged_rows)} (added {len(new_rows)})")
-			else:
-				print("No new records found. CSV refreshed/sorted.")
+		for line in dw_records.summary_lines(table, rec):
+			print(line)
+
+		changed = bool(rec.new_doc_ids or rec.pruned_doc_ids or rec.dropped_columns)
+		if changed and not args.yes:
+			if not prompt_yes_no(f"Update CSV at {csv_path}?"):
+				print("Aborted. CSV not modified.")
+				return EXIT_ABORTED
+
+		write_csv(csv_path, rec.header, rec.rows)
+		print(f"Updated CSV: {csv_path}")
+		print(f"Rows before: {len(existing_rows)}")
+		print(f"Rows after : {len(rec.rows)} (added {len(rec.new_doc_ids)}, pruned {len(rec.pruned_doc_ids)})")
 	else:
 		print("[STAGE] Skipping Firestore inference record sync (--skip-records).")
 
@@ -543,6 +423,8 @@ def main() -> int:
 			bucket=args.bucket,
 			remote_prefix=args.remote_prefix,
 			existing_basenames=existing_basenames,
+			begin_date=begin_date,
+			end_date=end_date,
 		)
 	except Exception as e:
 		print(f"[ERROR] Failed to plan image downloads: {e}")
@@ -560,7 +442,7 @@ def main() -> int:
 	if run_for_real and not args.yes and items:
 		if not prompt_yes_no(f"Download {len(items)} missing image file(s) now?"):
 			print("Aborted image download stage.")
-			return 0
+			return EXIT_ABORTED
 
 	rc = download_grouped(items, run_for_real=run_for_real)
 	if rc == 0:
